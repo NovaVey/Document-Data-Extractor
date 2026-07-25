@@ -1,15 +1,19 @@
-// Manual dev tool: runs real extraction against every ground-truth document
-// and reports a quick match/mismatch readout. Not the formal accuracy
-// measurement (that's item 9, against real validators + confidence
-// scoring) — this is an integrity check that the fixture set and the
-// extraction pipeline actually work together end to end, plus an early
-// read on where the prompt might need work. Run after `npm run build`:
+// Manual dev tool: runs real extraction, then the deterministic validators,
+// against every ground-truth document, and reports a quick match/mismatch
+// readout plus any validator flags. Not the formal accuracy measurement or
+// threshold tuning (that's item 9) — this is an integrity check that the
+// fixture set, extraction, and validators all actually work together end
+// to end. Every ground-truth document is known-good, so any validator flag
+// here means either the extraction or the validator has a real bug — not
+// something to route to review, since there's no review UI yet to route
+// to. Run after `npm run build`:
 //   node scripts/check-ground-truth.mjs
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { extractPdfText } from "../dist/extraction/pdf-text.js";
 import { extractFields } from "../dist/extraction/extract.js";
+import { validateFields } from "../dist/validation/validate.js";
 
 const TEMPLATE = [
   { key: "vendor_name", label: "Vendor name", type: "text", required: true },
@@ -54,6 +58,7 @@ async function main() {
   let totalFields = 0;
   let correctFields = 0;
   const mismatches = [];
+  const unexpectedValidations = [];
 
   for (const doc of groundTruth.documents) {
     const filePath = path.join("ground-truth/documents", doc.file);
@@ -68,6 +73,9 @@ async function main() {
     }
 
     const results = await extractFields(client, TEMPLATE, content);
+    const validations = validateFields(TEMPLATE, results);
+    const validationByKey = new Map(validations.map((v) => [v.key, v]));
+
     console.log(`\n=== ${doc.id} (${doc.kind}) ===`);
     for (const result of results) {
       const expected = doc.fields[result.key];
@@ -75,8 +83,14 @@ async function main() {
       totalFields++;
       if (ok) correctFields++;
       else mismatches.push({ doc: doc.id, field: result.key, expected, actual: result.rawValue });
+
+      const validation = validationByKey.get(result.key);
+      if (validation.validationStatus !== "valid") {
+        unexpectedValidations.push({ doc: doc.id, field: result.key, ...validation });
+      }
+
       console.log(
-        `  ${result.key.padEnd(15)} expected=${JSON.stringify(expected)} actual=${JSON.stringify(result.rawValue)} confidence=${result.modelConfidence} ${ok ? "OK" : "MISMATCH"}`,
+        `  ${result.key.padEnd(15)} expected=${JSON.stringify(expected)} actual=${JSON.stringify(result.rawValue)} confidence=${result.modelConfidence} ${ok ? "OK" : "MISMATCH"} | validation=${validation.validationStatus}${validation.validationNotes ? ` (${validation.validationNotes})` : ""}`,
       );
     }
   }
@@ -92,6 +106,13 @@ async function main() {
         `  ${m.doc}.${m.field}: expected=${JSON.stringify(m.expected)} actual=${JSON.stringify(m.actual)}`,
       );
     }
+  }
+
+  console.log(
+    `\n${unexpectedValidations.length === 0 ? "No" : unexpectedValidations.length} unexpected validation flags on known-good ground-truth documents`,
+  );
+  for (const v of unexpectedValidations) {
+    console.log(`  ${v.doc}.${v.field}: ${v.validationStatus} — ${v.validationNotes}`);
   }
 }
 
