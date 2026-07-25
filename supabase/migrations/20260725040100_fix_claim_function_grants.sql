@@ -1,0 +1,11 @@
+-- Fixes a real gap in the previous migration: `revoke all ... from public`
+-- only strips privileges granted to the PUBLIC pseudo-role. Supabase's
+-- default privileges grant EXECUTE on new public-schema functions directly
+-- to the named roles anon/authenticated/service_role, which a PUBLIC-only
+-- revoke never touches — confirmed live via pg_proc.proacl, which still
+-- showed anon and authenticated with execute rights after the "fix" in
+-- the prior migration. claim_next_document() does not check org
+-- membership (a shared worker must see every org's queue), so leaving it
+-- callable by anon/authenticated would let any signed-in user claim (and
+-- read) another org's queued documents through the RPC endpoint.
+revoke execute on function public.claim_next_document(interval) from anon, authenticated;
