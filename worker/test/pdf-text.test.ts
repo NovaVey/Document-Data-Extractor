@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { extractPdfText } from "../src/lib/extraction/pdf-text.js";
+import { extractPdfText } from "../src/extraction/pdf-text.js";
 
 describe("extractPdfText", () => {
   it("extracts the full embedded text layer from a digital PDF", async () => {
