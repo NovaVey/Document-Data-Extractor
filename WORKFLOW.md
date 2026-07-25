@@ -16,7 +16,7 @@
 - [x] Auth
 - [x] Orgs, memberships, RLS (reused by the next project)
 - [x] Vertical slice working
-- [ ] Explain-back: request path and isolation
+- [x] Explain-back: request path and isolation
 
 ## Phase 2 — Data model
 - [ ] Migrations for all 5 tables
