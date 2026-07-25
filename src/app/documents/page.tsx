@@ -10,8 +10,8 @@ export default async function DocumentsPage() {
   // which is exactly the property that makes RLS worth verifying directly.
   const { data: documents, error } = await supabase
     .from("documents")
-    .select("id, title, created_at")
-    .order("created_at", { ascending: false });
+    .select("id, original_filename, status, uploaded_at")
+    .order("uploaded_at", { ascending: false });
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-8">
@@ -35,9 +35,10 @@ export default async function DocumentsPage() {
           {documents.map((document) => (
             <li
               key={document.id}
-              className="rounded border border-black/10 px-4 py-3 dark:border-white/15"
+              className="flex items-center justify-between rounded border border-black/10 px-4 py-3 dark:border-white/15"
             >
-              {document.title}
+              <span>{document.original_filename}</span>
+              <span className="text-xs text-black/60 dark:text-white/60">{document.status}</span>
             </li>
           ))}
         </ul>

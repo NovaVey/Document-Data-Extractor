@@ -1,7 +1,7 @@
 # Doc Extractor — Build Workflow
 
 **Started:** 2026-07-25
-**Current phase:** 1
+**Current phase:** 2
 
 ## Phase 0 — Setup
 - [x] Confirm scope in/out
@@ -19,11 +19,11 @@
 - [x] Explain-back: request path and isolation
 
 ## Phase 2 — Data model
-- [ ] Migrations for all 5 tables
-- [ ] RLS on every table
-- [ ] Unique index on (org_id, file_hash)
-- [ ] Supporting indexes
-- [ ] Cascade deletes verified
+- [x] Migrations for all 5 tables
+- [x] RLS on every table
+- [x] Unique index on (org_id, file_hash)
+- [x] Supporting indexes
+- [x] Cascade deletes verified
 - [ ] Explain-back: raw vs normalized values
 
 ## Phase 3 — Core build
@@ -100,6 +100,12 @@
 | 2026-07-25 | `documents` in the Phase 1 migration is a deliberate placeholder (id, org_id, title, created_at only) | Needed something real to prove RLS isolation against before Phase 2 defines the full documents schema (template_id, storage_path, file_hash, status, etc.). Phase 2 will migrate this table to its full column set rather than starting a new one. |
 | 2026-07-25 | RLS isolation verified two ways | (1) SQL-level: created two throwaway auth users (direct SQL insert into auth.users/auth.identities, bcrypt via pgcrypto — no self-hosted Supabase CLI available here), one document per org, then simulated each user's session (`set local role authenticated; set local request.jwt.claims`) inside a rolled-back transaction and confirmed each saw only their own org's one document; a no-claims case confirmed zero rows (default-deny). This is a direct test of the actual enforcement mechanism (Postgres RLS), not app code. (2) App-level: confirmed via Playwright against a local `next dev` that an unauthenticated visit to /documents redirects to /login. Full logged-in browser click-through (sign in → see own doc) could **not** be run — this sandbox's egress proxy blocks direct browser/Node access to `*.supabase.co` (confirmed via the exact failure: `net::ERR_TUNNEL_CONNECTION_FAILED` hitting the correct GoTrue token endpoint, i.e. a network policy block, not an app bug). All test users/orgs/documents were deleted after verification, confirmed back to zero rows. |
 | 2026-07-25 | ANTHROPIC_API_KEY left blank in local .env.local | Not needed until Phase 3 (first Claude API call). User confirmed the key is available; just hasn't been entered into any environment yet since nothing consumes it before Phase 3. |
+| 2026-07-25 | `documents` migrated in place to its full Phase 2 schema (rename created_at→uploaded_at, drop title, add template_id/original_filename/storage_path/file_hash/mime_type/page_count/status/error_message/processed_at/approved_by/approved_at) | Table was empty in the live project, so no data migration was needed — safe to add NOT NULL columns directly. Kept the same table identity (and its existing RLS policy, org_id index) rather than dropping/recreating. |
+| 2026-07-25 | `extraction_runs.created_at` added, though not in the original column list | Phase 3's per-org daily cost cap (item 17) has to sum "today's" cost across runs — unanswerable without each run recording what day it happened on. Flagged here rather than added silently. |
+| 2026-07-25 | `documents.template_id` → `ON DELETE RESTRICT`; person-reference columns (`approved_by`, `corrected_by`, `export_jobs.created_by`) → `ON DELETE SET NULL` | Not specified in the original schema. RESTRICT on template_id prevents deleting a template that documents still reference (a document without its template loses the meaning of its extracted fields). SET NULL on person-references preserves the row (and its audit trail) if that user account is later deleted, rather than cascading the delete into unrelated data. |
+| 2026-07-25 | `extracted_fields`/`extraction_runs` RLS checks membership through the parent `documents.org_id` (no `org_id` column of their own) | Matches the schema as specified (neither table has an org_id column) — the same `is_org_member()` helper from Phase 1 is reused, just via an EXISTS join to `documents` instead of a direct column check. |
+| 2026-07-25 | Only SELECT RLS policies added for all Phase 2 tables, no insert/update/delete yet | Same pattern as Phase 1: write policies get added alongside the Phase 3 feature that actually needs them (template CRUD, upload, corrections, export), not guessed at ahead of time. The background extraction worker is expected to write via the service-role key, which bypasses RLS entirely. |
+| 2026-07-25 | Cascade deletes and the (org_id, file_hash) unique index verified live, then cleaned up | Inserted a full chain (org → template → document → field → run) via the live Supabase project, deleted the document, confirmed its field and run rows disappeared too. Confirmed the unique index rejects a duplicate (org_id, file_hash) pair but allows the same file_hash under a different org. All test rows deleted afterward — project back to zero extra rows. |
 |      | Review threshold: | |
 |      | Field accuracy: | |
 |      | Error catch rate: | |
