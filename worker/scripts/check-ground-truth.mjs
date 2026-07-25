@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { extractPdfText } from "../dist/extraction/pdf-text.js";
 import { extractFields } from "../dist/extraction/extract.js";
 import { validateFields } from "../dist/validation/validate.js";
+import { scoreFields } from "../dist/scoring/score.js";
 
 const TEMPLATE = [
   { key: "vendor_name", label: "Vendor name", type: "text", required: true },
@@ -74,7 +75,8 @@ async function main() {
 
     const results = await extractFields(client, TEMPLATE, content);
     const validations = validateFields(TEMPLATE, results);
-    const validationByKey = new Map(validations.map((v) => [v.key, v]));
+    const scored = scoreFields(results, validations);
+    const scoredByKey = new Map(scored.map((s) => [s.key, s]));
 
     console.log(`\n=== ${doc.id} (${doc.kind}) ===`);
     for (const result of results) {
@@ -84,13 +86,21 @@ async function main() {
       if (ok) correctFields++;
       else mismatches.push({ doc: doc.id, field: result.key, expected, actual: result.rawValue });
 
-      const validation = validationByKey.get(result.key);
-      if (validation.validationStatus !== "valid") {
-        unexpectedValidations.push({ doc: doc.id, field: result.key, ...validation });
+      const field = scoredByKey.get(result.key);
+      if (field.validationStatus !== "valid") {
+        unexpectedValidations.push({ doc: doc.id, field: result.key, ...field });
+      }
+      if (field.validationStatus === "valid" && field.finalConfidence !== field.modelConfidence) {
+        unexpectedValidations.push({
+          doc: doc.id,
+          field: result.key,
+          validationStatus: field.validationStatus,
+          validationNotes: `finalConfidence (${field.finalConfidence}) should equal modelConfidence (${field.modelConfidence}) when valid`,
+        });
       }
 
       console.log(
-        `  ${result.key.padEnd(15)} expected=${JSON.stringify(expected)} actual=${JSON.stringify(result.rawValue)} confidence=${result.modelConfidence} ${ok ? "OK" : "MISMATCH"} | validation=${validation.validationStatus}${validation.validationNotes ? ` (${validation.validationNotes})` : ""}`,
+        `  ${result.key.padEnd(15)} expected=${JSON.stringify(expected)} actual=${JSON.stringify(result.rawValue)} confidence=${result.modelConfidence} final=${field.finalConfidence} ${ok ? "OK" : "MISMATCH"} | validation=${field.validationStatus}${field.validationNotes ? ` (${field.validationNotes})` : ""}`,
       );
     }
   }

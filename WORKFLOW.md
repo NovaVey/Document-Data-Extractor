@@ -34,7 +34,7 @@
 - [x] 5. Single-document extraction, console output
 - [x] 6. Ground-truth set: 10 docs, fields hand-keyed
 - [x] 7. Deterministic validators
-- [ ] 8. Confidence scoring, validators weighted heaviest
+- [x] 8. Confidence scoring, validators weighted heaviest
 - [ ] 9. Review threshold tuned against ground truth
 - [ ] 10. Review split view
 - [ ] 11. Correction persistence
@@ -141,6 +141,10 @@
 | 2026-07-25 | 44 real, permanent vitest tests (parse.test.ts, validate.test.ts) — contrast with item 5's live-API dev script | This logic is 100% deterministic and free to run, the opposite situation from calling Claude — real CI-run test coverage is exactly right here, covering every parse format/edge case and every cross-field check (including that a partially-invalid input correctly skips the arithmetic check rather than cascading blame onto fields that were never wrong). |
 | 2026-07-25 | Ran real extraction + validation against all 10 ground-truth documents, not just unit tests in isolation | Every one of 80 fields validated exactly as expected: the intentionally-missing PO number came back `valid` (optional + absent is fine), the "Due on receipt" case came back `valid` via the known-term path, and every arithmetic/date-order check passed cleanly. Zero unexpected validation flags on documents that are known-good by construction — the meaningful integration proof, not just that the pure functions work in isolation. |
 | 2026-07-25 | Validators are not yet wired into the worker's real `processDocument()` | Same reasoning as item 5: the full chain (extract → validate → score confidence → decide review routing) isn't complete until item 8 exists. Writing validated-but-not-confidence-scored results into the real `extracted_fields` table now would be another half-finished wiring. |
+| 2026-07-25 | Confidence scoring is a hard override, not a weighted blend: `finalConfidence = modelConfidence` when `validationStatus === "valid"`, else exactly `0` | The plan's own wording — "where they disagree, trust the validator" — reads as full override, not partial compromise. A soft weighted average (e.g. `0.3 * modelConfidence + 0.7 * validatorSignal`) would still let a model that's 99% confident about a misread digit pull the final score up to a non-trivial value even though a deterministic check proved the value wrong. Zero is the only score that can't be argued past a review threshold. |
+| 2026-07-25 | `scoreFields()` throws if a validation result is missing for any extracted field's key | Every extracted field must be validated before scoring — a silently-skipped field would surface as a missing row in `extracted_fields`, not a loud failure. Since `validateFields()` always returns one result per template field and extraction always follows the same template, a missing key here means a real bug upstream, not a case to route to review. |
+| 2026-07-25 | Added a synthetic "high model confidence but failed arithmetic check → finalConfidence must be 0" test case (`score.test.ts`), not just the pass-through case | This is the actual case the whole design exists for, and it can't be produced from the ground-truth set (every field there validates as `valid` — see below) — has to be constructed by hand to prove the override actually fires when the model and validator disagree. |
+| 2026-07-25 | Ran the full extract → validate → score pipeline against all 10 ground-truth documents (`check-ground-truth.mjs`, extended to report `finalConfidence`) | All 80/80 fields validated `valid` and every `finalConfidence` exactly equals `modelConfidence`, confirming the pass-through path end to end on real API output. This is a proof of the pass-through path only — the override path (item 8's actual point) is proven by the synthetic unit test above, since a clean ground-truth set by construction never disagrees with the validators. |
 |      | Review threshold: | |
 |      | Field accuracy: | |
 |      | Error catch rate: | |
