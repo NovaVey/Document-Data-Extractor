@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createDocumentRecord, documentExistsForHash } from "./actions";
+import {
+  createDocumentRecord,
+  deleteDocumentForReplace,
+  findDuplicateDocument,
+  type DuplicateDocument,
+} from "./actions";
 
 // Mirrors the storage bucket's own allowed_mime_types/file_size_limit
 // (supabase/migrations/20260725020000_upload_storage.sql) — that bucket
@@ -14,9 +19,12 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 type FileResult = {
   name: string;
-  status: "pending" | "success" | "error" | "skipped";
+  status: "checking" | "pending" | "uploading" | "success" | "error" | "skipped" | "duplicate";
   message?: string;
+  duplicateOf?: DuplicateDocument;
 };
+
+type FileEntry = { file: File; hash: string };
 
 type Template = { id: string; name: string };
 
@@ -25,60 +33,130 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [results, setResults] = useState<FileResult[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Per-index {file, hash}, populated once during the duplicate-check
+  // pass and read later by the Skip/Replace buttons — a ref rather than
+  // state since it's an input to later actions, not something rendered.
+  const entriesRef = useRef<FileEntry[]>([]);
+
+  async function uploadEntry(index: number, entry: FileEntry) {
+    setResults((prev) => setResult(prev, index, { status: "uploading" }));
+
+    const supabase = createClient();
+    try {
+      const storagePath = `${orgId}/${crypto.randomUUID()}-${sanitizeFilename(entry.file.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(storagePath, entry.file, { contentType: entry.file.type });
+      if (uploadError) throw new Error(uploadError.message);
+
+      await createDocumentRecord({
+        originalFilename: entry.file.name,
+        storagePath,
+        fileHash: entry.hash,
+        mimeType: entry.file.type,
+        templateId,
+      });
+
+      setResults((prev) => setResult(prev, index, { status: "success", message: undefined }));
+    } catch (err) {
+      setResults((prev) =>
+        setResult(prev, index, {
+          status: "error",
+          message: err instanceof Error ? err.message : "Upload failed",
+        }),
+      );
+    }
+  }
 
   async function handleFiles(fileList: FileList) {
     const files = Array.from(fileList);
     setUploading(true);
-    setResults(files.map((file) => ({ name: file.name, status: "pending" })));
+    setResults(files.map((file) => ({ name: file.name, status: "checking" })));
 
-    const supabase = createClient();
+    const seenHashes: string[] = [];
+    const entries: FileEntry[] = [];
+    const statuses: FileResult["status"][] = [];
 
+    function update(i: number, patch: Partial<FileResult>) {
+      statuses[i] = patch.status ?? statuses[i];
+      setResults((prev) => setResult(prev, i, patch));
+    }
+
+    // Phase 1: validate and hash every file, checking for duplicates both
+    // within this batch (client-side, no round trip) and against what's
+    // already in this org (via the server) — before uploading anything,
+    // so a duplicate never wastes a Storage upload only to be rejected by
+    // the (org_id, file_hash) unique index afterward.
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      try {
-        if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-          throw new Error(`Unsupported file type: ${file.type || "unknown"}`);
-        }
-        if (file.size > MAX_FILE_SIZE) {
-          throw new Error("File exceeds the 20MB limit");
-        }
 
-        const fileHash = await sha256Hex(file);
-
-        if (await documentExistsForHash(fileHash)) {
-          setResults((prev) =>
-            setResult(prev, i, { status: "skipped", message: "Already uploaded" }),
-          );
-          continue;
-        }
-
-        const storagePath = `${orgId}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(storagePath, file, { contentType: file.type });
-        if (uploadError) throw new Error(uploadError.message);
-
-        await createDocumentRecord({
-          originalFilename: file.name,
-          storagePath,
-          fileHash,
-          mimeType: file.type,
-          templateId,
-        });
-
-        setResults((prev) => setResult(prev, i, { status: "success" }));
-      } catch (err) {
-        setResults((prev) =>
-          setResult(prev, i, {
-            status: "error",
-            message: err instanceof Error ? err.message : "Upload failed",
-          }),
-        );
+      if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+        entries.push({ file, hash: "" });
+        update(i, { status: "error", message: `Unsupported file type: ${file.type || "unknown"}` });
+        continue;
       }
+      if (file.size > MAX_FILE_SIZE) {
+        entries.push({ file, hash: "" });
+        update(i, { status: "error", message: "File exceeds the 20MB limit" });
+        continue;
+      }
+
+      const hash = await sha256Hex(file);
+      entries.push({ file, hash });
+
+      const sameBatchIndex = seenHashes.indexOf(hash);
+      seenHashes.push(hash);
+      if (sameBatchIndex !== -1) {
+        update(i, {
+          status: "skipped",
+          message: `Duplicate of "${files[sameBatchIndex].name}" earlier in this batch`,
+        });
+        continue;
+      }
+
+      const duplicate = await findDuplicateDocument(hash);
+      if (duplicate) {
+        update(i, { status: "duplicate", duplicateOf: duplicate });
+        continue;
+      }
+
+      update(i, { status: "pending" });
+    }
+
+    entriesRef.current = entries;
+
+    // Phase 2: upload everything still pending. Files awaiting a
+    // Skip/Replace decision (status "duplicate") are deliberately left
+    // alone here — they're resolved by the buttons below, not this loop.
+    for (let i = 0; i < entries.length; i++) {
+      if (statuses[i] !== "pending") continue;
+      await uploadEntry(i, entries[i]);
     }
 
     setUploading(false);
     router.refresh();
+  }
+
+  function handleSkip(index: number) {
+    setResults((prev) =>
+      setResult(prev, index, { status: "skipped", message: "Skipped", duplicateOf: undefined }),
+    );
+  }
+
+  async function handleReplace(index: number, existingDocumentId: string) {
+    setResults((prev) => setResult(prev, index, { status: "uploading", message: "Replacing…" }));
+    try {
+      await deleteDocumentForReplace(existingDocumentId);
+      await uploadEntry(index, entriesRef.current[index]);
+      router.refresh();
+    } catch (err) {
+      setResults((prev) =>
+        setResult(prev, index, {
+          status: "error",
+          message: err instanceof Error ? err.message : "Failed to replace",
+        }),
+      );
+    }
   }
 
   if (templates.length === 0) {
@@ -132,19 +210,52 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
       {results.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
           {results.map((result, idx) => (
-            <li key={idx} className="flex items-center justify-between gap-4">
-              <span className="truncate">{result.name}</span>
-              <span
-                className={
-                  result.status === "error"
-                    ? "text-red-600 dark:text-red-400"
-                    : result.status === "success"
-                      ? "text-green-600 dark:text-green-400"
-                      : "text-black/60 dark:text-white/60"
-                }
-              >
-                {result.status === "pending" ? "Uploading…" : (result.message ?? result.status)}
-              </span>
+            <li key={idx} className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-4">
+                <span className="truncate">{result.name}</span>
+                <span
+                  className={
+                    result.status === "error"
+                      ? "text-red-600 dark:text-red-400"
+                      : result.status === "success"
+                        ? "text-green-600 dark:text-green-400"
+                        : result.status === "duplicate"
+                          ? "text-amber-700 dark:text-amber-400"
+                          : "text-black/60 dark:text-white/60"
+                  }
+                >
+                  {result.status === "checking"
+                    ? "Checking…"
+                    : result.status === "pending"
+                      ? "Queued…"
+                      : result.status === "uploading"
+                        ? (result.message ?? "Uploading…")
+                        : (result.message ?? result.status)}
+                </span>
+              </div>
+              {result.status === "duplicate" && result.duplicateOf && (
+                <div className="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs dark:bg-amber-950/20">
+                  <span className="text-black/70 dark:text-white/70">
+                    Duplicate of &quot;{result.duplicateOf.originalFilename}&quot; (
+                    {result.duplicateOf.status}, uploaded{" "}
+                    {new Date(result.duplicateOf.uploadedAt).toLocaleDateString()})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSkip(idx)}
+                    className="rounded border border-black/10 px-2 py-0.5 dark:border-white/15"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReplace(idx, result.duplicateOf!.id)}
+                    className="rounded border border-black/10 px-2 py-0.5 dark:border-white/15"
+                  >
+                    Replace existing
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

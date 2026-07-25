@@ -10,16 +10,71 @@ export async function signOut() {
   redirect("/login");
 }
 
+export type DuplicateDocument = {
+  id: string;
+  originalFilename: string;
+  status: string;
+  uploadedAt: string;
+};
+
 // RLS already scopes this to the caller's own org — no need to filter by
-// org_id explicitly, the same pattern documents/page.tsx uses.
-export async function documentExistsForHash(fileHash: string): Promise<boolean> {
+// org_id explicitly, the same pattern documents/page.tsx uses. Returns the
+// existing document's own details (not just a boolean) so the upload form
+// can show the reviewer what they're about to skip or replace, instead of
+// silently dropping the file.
+export async function findDuplicateDocument(fileHash: string): Promise<DuplicateDocument | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("documents")
-    .select("id")
+    .select("id, original_filename, status, uploaded_at")
     .eq("file_hash", fileHash)
     .maybeSingle();
-  return data !== null;
+
+  if (!data) return null;
+  return {
+    id: data.id,
+    originalFilename: data.original_filename,
+    status: data.status,
+    uploadedAt: data.uploaded_at,
+  };
+}
+
+// "Replace" deletes the existing document (row + Storage object) so the
+// new upload can take the same file_hash — the (org_id, file_hash) unique
+// index otherwise has no other way to let a legitimate re-upload through.
+// Storage path is looked up server-side via the caller's own RLS-scoped
+// SELECT rather than trusted from the client, same reasoning as never
+// trusting a client-supplied org_id: the id is the only thing the client
+// needs to hand over, everything else about what gets deleted is derived
+// from it under RLS.
+export async function deleteDocumentForReplace(documentId: string): Promise<void> {
+  const supabase = await createClient();
+
+  const { data: document } = await supabase
+    .from("documents")
+    .select("storage_path")
+    .eq("id", documentId)
+    .maybeSingle();
+
+  if (!document) {
+    throw new Error("Document not found");
+  }
+
+  const { error: storageError } = await supabase.storage
+    .from("documents")
+    .remove([document.storage_path]);
+
+  if (storageError) {
+    throw new Error(storageError.message);
+  }
+
+  const { error: deleteError } = await supabase.from("documents").delete().eq("id", documentId);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  revalidatePath("/documents");
 }
 
 type CreateDocumentInput = {
