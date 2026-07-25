@@ -28,7 +28,7 @@
 
 ## Phase 3 — Core build
 - [x] 1. Upload + storage with validation
-- [ ] 2. Text extraction, raw output read by hand
+- [x] 2. Text extraction, raw output read by hand
 - [ ] 3. Template CRUD
 - [ ] 4. Queue worker skeleton, crash-safe
 - [ ] 5. Single-document extraction, console output
@@ -110,6 +110,7 @@
 | 2026-07-25 | Storage path convention: `${org_id}/${uuid}-${sanitized_filename}` | The leading org_id segment is what storage.objects RLS policies check via `(storage.foldername(name))[1]::uuid` and `is_org_member()` — same pattern as every other org-scoped table, just read from a path instead of a column. Verified both directions live (own-org path accepted, other-org path rejected) via the same SQL-level RLS simulation technique used in Phase 1/2. |
 | 2026-07-25 | Added the `documents` INSERT policy Phase 2 deliberately deferred | Phase 2's decisions log said write policies land "alongside the Phase 3 feature that actually needs them" — upload is that feature. Verified live (own-org insert succeeds, other-org insert rejected), same technique. |
 | 2026-07-25 | Duplicate-hash pre-check before upload, not the full replace/skip prompt | A quick SELECT for an existing (org, file_hash) match before uploading bytes avoids wasting a Storage upload (and leaving an orphaned object) on an obvious duplicate. The polished replace/skip UI is explicitly item 15's job — this is just the minimal "don't waste an upload" version, not building ahead of the plan. |
+| 2026-07-25 | PDF text extraction via `unpdf`; scanned images/image-only PDFs get no separate OCR pipeline, they go to Claude's vision input at extraction time (item 5) | Built two synthetic test fixtures (a real digital PDF and the same content rendered as a "scanned" image wrapped in a PDF) and read the actual extracted output by hand, per this item's own instruction. Digital PDF: clean, complete, correct text (434 chars, every field present). Scanned/image-only PDF: **zero characters** — confirms text-layer extraction is structurally blind to image content, exactly the trap this item warns about. Decided now rather than discovering it in Phase 4: no bolted-on OCR dependency (Tesseract etc.) — Claude is already multimodal and already the extraction model this project pays for, so image-based documents get read directly by vision instead of a second, separately-tuned OCR system. Consistent with the scope note ruling out "custom-trained OCR models" — this delegates image reading to the vision-capable model already in use, it doesn't add one. Both fixtures and a real vitest test are checked in (`test/fixtures/*.pdf`, `test/pdf-text.test.ts`) rather than left as a throwaway script. |
 |      | Review threshold: | |
 |      | Field accuracy: | |
 |      | Error catch rate: | |
