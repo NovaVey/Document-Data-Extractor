@@ -46,17 +46,36 @@ export async function createDocumentRecord(input: CreateDocumentInput) {
     throw new Error("No organization membership found");
   }
 
-  const { error } = await supabase.from("documents").insert({
-    org_id: membership.org_id,
-    template_id: input.templateId,
-    original_filename: input.originalFilename,
-    storage_path: input.storagePath,
-    file_hash: input.fileHash,
-    mime_type: input.mimeType,
-  });
+  const { data: inserted, error } = await supabase
+    .from("documents")
+    .insert({
+      org_id: membership.org_id,
+      template_id: input.templateId,
+      original_filename: input.originalFilename,
+      storage_path: input.storagePath,
+      file_hash: input.fileHash,
+      mime_type: input.mimeType,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  // Enqueue: 'uploaded' -> 'queued'. A distinct step (not part of the
+  // insert's default) so a future cost-cap check (item 17) has a natural
+  // place to block enqueueing without touching the upload path itself.
+  // Only the `status` column is grantable here (see migration
+  // 20260725040200_enqueue_policy.sql) — this can never touch anything
+  // else on the row, even if called with a crafted request.
+  const { error: enqueueError } = await supabase
+    .from("documents")
+    .update({ status: "queued" })
+    .eq("id", inserted.id);
+
+  if (enqueueError) {
+    throw new Error(enqueueError.message);
   }
 
   revalidatePath("/documents");
