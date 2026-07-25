@@ -55,12 +55,14 @@ export default async function DocumentsPage() {
       {!error && documents && documents.length > 0 && (
         <ul className="flex flex-col gap-2">
           {documents.map((document) => (
-            <li
-              key={document.id}
-              className="flex items-center justify-between rounded border border-black/10 px-4 py-3 dark:border-white/15"
-            >
-              <span>{document.original_filename}</span>
-              <span className="text-xs text-black/60 dark:text-white/60">{document.status}</span>
+            <li key={document.id}>
+              <Link
+                href={`/documents/${document.id}`}
+                className="flex items-center justify-between rounded border border-black/10 px-4 py-3 hover:bg-black/[0.02] dark:border-white/15 dark:hover:bg-white/[0.03]"
+              >
+                <span>{document.original_filename}</span>
+                <span className="text-xs text-black/60 dark:text-white/60">{document.status}</span>
+              </Link>
             </li>
           ))}
         </ul>

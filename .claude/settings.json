@@ -4,7 +4,8 @@
       "Bash(npm run build *)",
       "Bash(npm test*)",
       "Bash(npm run lint *)",
-      "Bash(npm run format *)"
+      "Bash(npm run format *)",
+      "mcp__Railway_Supabase_MCP__supabase_execute_sql"
     ]
   }
 }
