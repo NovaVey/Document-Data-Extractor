@@ -1,8 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgId } from "@/lib/org";
 import { signOut } from "./actions";
+import { UploadForm } from "./upload-form";
 
 export default async function DocumentsPage() {
   const supabase = await createClient();
+  const orgId = await getCurrentOrgId();
 
   // No org_id filter here, deliberately: RLS is what scopes this query to
   // the caller's org, not application code. If RLS were ever misconfigured
@@ -23,6 +26,14 @@ export default async function DocumentsPage() {
           </button>
         </form>
       </div>
+
+      {orgId ? (
+        <UploadForm orgId={orgId} />
+      ) : (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          No organization membership found — uploads are disabled.
+        </p>
+      )}
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error.message}</p>}
 

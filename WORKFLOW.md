@@ -27,7 +27,7 @@
 - [x] Explain-back: raw vs normalized values
 
 ## Phase 3 — Core build
-- [ ] 1. Upload + storage with validation
+- [x] 1. Upload + storage with validation
 - [ ] 2. Text extraction, raw output read by hand
 - [ ] 3. Template CRUD
 - [ ] 4. Queue worker skeleton, crash-safe
@@ -106,6 +106,10 @@
 | 2026-07-25 | `extracted_fields`/`extraction_runs` RLS checks membership through the parent `documents.org_id` (no `org_id` column of their own) | Matches the schema as specified (neither table has an org_id column) — the same `is_org_member()` helper from Phase 1 is reused, just via an EXISTS join to `documents` instead of a direct column check. |
 | 2026-07-25 | Only SELECT RLS policies added for all Phase 2 tables, no insert/update/delete yet | Same pattern as Phase 1: write policies get added alongside the Phase 3 feature that actually needs them (template CRUD, upload, corrections, export), not guessed at ahead of time. The background extraction worker is expected to write via the service-role key, which bypasses RLS entirely. |
 | 2026-07-25 | Cascade deletes and the (org_id, file_hash) unique index verified live, then cleaned up | Inserted a full chain (org → template → document → field → run) via the live Supabase project, deleted the document, confirmed its field and run rows disappeared too. Confirmed the unique index rejects a duplicate (org_id, file_hash) pair but allows the same file_hash under a different org. All test rows deleted afterward — project back to zero extra rows. |
+| 2026-07-25 | Uploads go browser → Supabase Storage directly, not through a Next.js server/API route | Vercel serverless functions have a request body size limit (a few MB) and a request timeout — proxying file bytes through our own server would hit both under real invoice-scan file sizes and a 25-file batch (item 14). The browser Supabase client uploads straight to Storage using the user's own session; the server only ever handles small JSON metadata (filename, hash, mime type) to insert the `documents` row. Storage bucket `documents` created private, with `allowed_mime_types`/`file_size_limit` (20MB, not specified anywhere — my default) enforced at the infrastructure level, not just client-side JS. |
+| 2026-07-25 | Storage path convention: `${org_id}/${uuid}-${sanitized_filename}` | The leading org_id segment is what storage.objects RLS policies check via `(storage.foldername(name))[1]::uuid` and `is_org_member()` — same pattern as every other org-scoped table, just read from a path instead of a column. Verified both directions live (own-org path accepted, other-org path rejected) via the same SQL-level RLS simulation technique used in Phase 1/2. |
+| 2026-07-25 | Added the `documents` INSERT policy Phase 2 deliberately deferred | Phase 2's decisions log said write policies land "alongside the Phase 3 feature that actually needs them" — upload is that feature. Verified live (own-org insert succeeds, other-org insert rejected), same technique. |
+| 2026-07-25 | Duplicate-hash pre-check before upload, not the full replace/skip prompt | A quick SELECT for an existing (org, file_hash) match before uploading bytes avoids wasting a Storage upload (and leaving an orphaned object) on an obvious duplicate. The polished replace/skip UI is explicitly item 15's job — this is just the minimal "don't waste an upload" version, not building ahead of the plan. |
 |      | Review threshold: | |
 |      | Field accuracy: | |
 |      | Error catch rate: | |
