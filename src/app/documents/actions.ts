@@ -27,6 +27,7 @@ type CreateDocumentInput = {
   storagePath: string;
   fileHash: string;
   mimeType: string;
+  templateId: string;
 };
 
 // org_id is derived from the caller's own membership, never trusted from
@@ -47,6 +48,7 @@ export async function createDocumentRecord(input: CreateDocumentInput) {
 
   const { error } = await supabase.from("documents").insert({
     org_id: membership.org_id,
+    template_id: input.templateId,
     original_filename: input.originalFilename,
     storage_path: input.storagePath,
     file_hash: input.fileHash,

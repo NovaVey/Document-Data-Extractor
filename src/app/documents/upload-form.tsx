@@ -18,8 +18,11 @@ type FileResult = {
   message?: string;
 };
 
-export function UploadForm({ orgId }: { orgId: string }) {
+type Template = { id: string; name: string };
+
+export function UploadForm({ orgId, templates }: { orgId: string; templates: Template[] }) {
   const router = useRouter();
+  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [results, setResults] = useState<FileResult[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -60,6 +63,7 @@ export function UploadForm({ orgId }: { orgId: string }) {
           storagePath,
           fileHash,
           mimeType: file.type,
+          templateId,
         });
 
         setResults((prev) => setResult(prev, i, { status: "success" }));
@@ -77,8 +81,38 @@ export function UploadForm({ orgId }: { orgId: string }) {
     router.refresh();
   }
 
+  if (templates.length === 0) {
+    return (
+      <p className="text-sm text-black/60 dark:text-white/60">
+        No templates yet —{" "}
+        <a href="/templates/new" className="underline underline-offset-2">
+          create one
+        </a>{" "}
+        before uploading documents.
+      </p>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded border border-black/10 p-4 dark:border-white/15">
+      <div className="flex flex-col gap-1">
+        <label htmlFor="template-select" className="text-sm font-medium">
+          Template
+        </label>
+        <select
+          id="template-select"
+          value={templateId}
+          onChange={(event) => setTemplateId(event.target.value)}
+          disabled={uploading}
+          className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+        >
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </select>
+      </div>
       <label htmlFor="file-upload" className="text-sm font-medium">
         Upload documents (PDF, PNG, or JPEG — up to 20MB each)
       </label>

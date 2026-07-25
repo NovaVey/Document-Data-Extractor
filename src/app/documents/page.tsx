@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgId } from "@/lib/org";
 import { signOut } from "./actions";
@@ -16,19 +17,29 @@ export default async function DocumentsPage() {
     .select("id, original_filename, status, uploaded_at")
     .order("uploaded_at", { ascending: false });
 
+  const { data: templates } = await supabase
+    .from("extraction_templates")
+    .select("id, name")
+    .order("name");
+
   return (
     <main className="flex flex-1 flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Documents</h1>
-        <form action={signOut}>
-          <button type="submit" className="text-sm underline underline-offset-2">
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-4">
+          <Link href="/templates" className="text-sm underline underline-offset-2">
+            Templates
+          </Link>
+          <form action={signOut}>
+            <button type="submit" className="text-sm underline underline-offset-2">
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
 
       {orgId ? (
-        <UploadForm orgId={orgId} />
+        <UploadForm orgId={orgId} templates={templates ?? []} />
       ) : (
         <p className="text-sm text-red-600 dark:text-red-400">
           No organization membership found — uploads are disabled.
