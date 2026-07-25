@@ -92,7 +92,8 @@
 ## Decisions log
 | Date | Decision | Why |
 |------|----------|-----|
-| 2026-07-25 | Lead document type: invoices | Default per plan; README stub already committed as "Extract fields from invoice PDFs..." — treated as the user's own prior decision. This session is non-interactive (no live chat to confirm), so this is stated here as the working assumption. Flip it before Phase 2's schema work if wrong — cheap to change now, expensive after templates/fixtures exist. |
+| 2026-07-25 | Lead document type: invoices | Confirmed live by user. Matches the plan's default and the existing README stub. |
+| 2026-07-25 | API keys (Claude API, Supabase) confirmed available | Confirmed live by user — both accounts/keys ready. Actual values still only go in the environment, never the repo. |
 | 2026-07-25 | Node/TS toolchain (ESLint flat config, Prettier, Vitest) as Phase 0 CI baseline | Framework choice (Next.js vs. other) is a Phase 1 item, not Phase 0. Phase 0 only needs lint/build/test to run in CI; Phase 1 scaffold builds on top of this and may extend the build script. |
 |      | Review threshold: | |
 |      | Field accuracy: | |
@@ -100,5 +101,4 @@
 |      | Cost per document: | |
 
 ## Open questions
-- **API keys not confirmed.** This session is non-interactive, so "(ask) Confirm API keys available: Claude API, Supabase" could not be asked live. `.env.example` has both key names in place. Phase 1 (Supabase auth/RLS) and Phase 3.5+ (Claude extraction calls) cannot be built and *tested end-to-end* without real keys in the environment. Confirm before Phase 1 starts, or Phase 1 will get built against local/mocked Supabase only.
-- **Document type (invoices) is an inferred default, not a live confirmation.** Say so if a different lead type is wanted — cheapest to change before Phase 2.
+- (none — document type and API key availability both confirmed live on 2026-07-25)
