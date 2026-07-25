@@ -1,7 +1,7 @@
 # Doc Extractor — Build Workflow
 
 **Started:** 2026-07-25
-**Current phase:** 2
+**Current phase:** 3
 
 ## Phase 0 — Setup
 - [x] Confirm scope in/out
@@ -24,7 +24,7 @@
 - [x] Unique index on (org_id, file_hash)
 - [x] Supporting indexes
 - [x] Cascade deletes verified
-- [ ] Explain-back: raw vs normalized values
+- [x] Explain-back: raw vs normalized values
 
 ## Phase 3 — Core build
 - [ ] 1. Upload + storage with validation
