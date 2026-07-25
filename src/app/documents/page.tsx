@@ -40,6 +40,11 @@ export default async function DocumentsPage({
   const templateNameById = new Map((templates ?? []).map((t) => [t.id, t.name]));
   const hasFilters = Boolean(status || template || q);
 
+  const exportParams = new URLSearchParams();
+  if (template) exportParams.set("template", template);
+  if (q) exportParams.set("q", q);
+  const exportFilterParams = exportParams.size > 0 ? `&${exportParams.toString()}` : "";
+
   return (
     <main className="flex flex-1 flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
@@ -122,6 +127,25 @@ export default async function DocumentsPage({
           </Link>
         )}
       </form>
+
+      {/* Export always scopes to approved documents only, regardless of
+          the status filter above — carries the template/filename filters
+          through since those still make sense for "export this subset". */}
+      <div className="flex items-center gap-4 text-sm">
+        <a
+          href={`/documents/export?format=csv${exportFilterParams}`}
+          className="underline underline-offset-2"
+        >
+          Export CSV
+        </a>
+        <a
+          href={`/documents/export?format=xlsx${exportFilterParams}`}
+          className="underline underline-offset-2"
+        >
+          Export XLSX
+        </a>
+        <span className="text-xs text-black/60 dark:text-white/60">(approved documents only)</span>
+      </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error.message}</p>}
 
