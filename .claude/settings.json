@@ -6,7 +6,10 @@
       "Bash(npm run lint *)",
       "Bash(npm run format *)",
       "mcp__Railway_Supabase_MCP__supabase_execute_sql",
-      "mcp__Railway_Supabase_MCP__supabase_apply_migration"
+      "mcp__Railway_Supabase_MCP__supabase_apply_migration",
+      "Bash(git fetch *)",
+      "Bash(npm audit)",
+      "Bash(npm audit --omit=dev)"
     ]
   }
 }
