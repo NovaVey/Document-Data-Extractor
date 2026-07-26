@@ -46,18 +46,18 @@
 - [x] 17. Per-org daily cost cap
 
 ## Phase 4 — Done-criteria verification
-- [ ] 25-file batch, no timeout
-- [ ] Field accuracy measured and recorded
-- [ ] Every ground-truth error routed to review
-- [ ] Nothing below threshold reaches export untouched
-- [ ] Corrections persist to export
-- [ ] Corrupt + locked files fail alone
-- [ ] Export matches screen (ISO dates, numeric currency)
-- [ ] Duplicate upload caught
-- [ ] Delete removes stored file
-- [ ] Cost cap stops processing
-- [ ] Dead worker leaves row recoverable
-- [ ] No document content in any log
+- [x] 25-file batch, no timeout
+- [x] Field accuracy measured and recorded
+- [x] Every ground-truth error routed to review
+- [x] Nothing below threshold reaches export untouched
+- [x] Corrections persist to export
+- [x] Corrupt + locked files fail alone
+- [x] Export matches screen (ISO dates, numeric currency)
+- [x] Duplicate upload caught
+- [x] Delete removes stored file
+- [x] Cost cap stops processing
+- [x] Dead worker leaves row recoverable
+- [x] No document content in any log
 
 ## Phase 5 — Demo data
 - [ ] 12 invoices, 3 fictional vendors
@@ -191,10 +191,16 @@
 | 2026-07-26 | Cap default (500 cents = $5.00/day) is duplicated a fourth time now (SQL function default, worker's `claim.ts` default, app's display constant) but made overridable per deployment via a `DAILY_COST_CAP_CENTS` env var on the worker side, without a redeploy or new migration | Same accepted tradeoff as the review threshold's three-way duplication — small, rarely changes, and the one place that actually *enforces* it is the database function; the app's copy is purely informational display, not enforcement, and is documented as such. |
 | 2026-07-26 | Added a small "today's extraction cost" line to the documents page, reading `extraction_runs` under the same RLS org-scoping as every other query on that page | The cap existing invisibly in the database isn't enough for a reader to actually verify it's real — a visible, live number (and a note when the cap is reached) makes the safety rail demonstrable, not just something to take on faith. "Today" is approximated as UTC midnight for this display; the actual enforcement uses Postgres's own `current_date`, which this informational number doesn't need to match to the second. |
 | 2026-07-26 | Verified live: a capped org's queued document was skipped by `claim_next_document()` even though it was older than a different org's queued document, which got claimed instead; a second claim (with the normal org's queue now empty) correctly returned nothing rather than falling through to the capped org's document | The real proof of a *per-org* cap: one org hitting its limit has zero effect on any other org's processing, and its own queue simply freezes (documents stay `queued`, not `failed`) until the cap resets the next day rather than being lost or misrepresented as broken. |
+| 2026-07-26 | Phase 4 run via a background Workflow (7 parallel investigation agents), then completed directly in the foreground after the background agents' own tool-call approval prompts turned out to interrupt the user repeatedly, independent of the main session's `.claude/settings.json` allowlist | Two of the 7 agents (error-routing-test, export-format-fidelity) completed and produced real, reviewed, committed work before this was noticed — both were read, verified (full test suite green), and committed on their own merits. The remaining 5 checks (claim_next_document regression, log-content audit, ground-truth accuracy, export-chain live proof, gap-inventory re-checks) were redone directly by hand instead of re-launching more background agents, avoiding further interruptions. One genuine bug surfaced in a stopped agent's own query (used a table named `orgs`, which doesn't exist — the real table is `organizations`) — never got the chance to run, so never affected anything, but worth noting as a reminder that agent-authored SQL still needs the same scrutiny as anything else before trusting its result. |
+| 2026-07-26 | Regression-checked `claim_next_document()`'s two pre-existing guarantees (dead-worker recovery, 25-document batch drain) against the CURRENT (interval, integer) signature, live | Both were last proven against the original single-parameter version, before item 17 dropped and replaced the function entirely — that earlier evidence no longer strictly proves the current function works, only that a now-superseded version once did. Re-ran both live: a stale-`processing` document was correctly reclaimed with a refreshed `processing_started_at`, and a fresh 25-document batch (inserted alongside the reclaimed one) drained to exactly 26 total claims with 0 left `queued`. No regression. |
+| 2026-07-26 | Audited every `console.*` call in the codebase for document-content leakage (the "no document content in any log" criterion) | `src/` (the Next.js app) has zero console calls at all. Every call in `worker/src/` logs only metadata — ids, filenames, statuses, counts, error reasons — never a field value, raw document text, or file bytes. The two dev scripts (`try-extraction.mjs`, `check-ground-truth.mjs`) do print raw values by design, an already-documented exception from when they were built (item 5/6): manual tools, never run by CI or the deployed worker. |
+| 2026-07-26 | Ran the ground-truth accuracy check fresh, post item-17's `extractFields()` signature change, not just trusted the last (now-stale) run from before that change | Rebuilt the worker and ran `check-ground-truth.mjs` live against the real API: 80/80 fields matched (100.0%), zero unexpected validation flags. Confirms the pipeline's actual behavior wasn't altered by the refactor that added token-usage tracking, not just that the code compiles. |
+| 2026-07-26 | Proved "nothing below threshold reaches export untouched" and "corrections persist to export" together, in one continuous live scenario, rather than trusting each item's separate original verification in isolation | Real throwaway org/user/document: a field scored 0 (garbled, below threshold) blocked `approve_document()` with the expected error; correcting it unblocked approval, which then succeeded; the document ended up `approved`; and reading the row exactly as the export code path would (`was_corrected ? corrected_value : normalized_value ?? raw_value`) returned the human's correction, not the original garbled reading — with the document now genuinely inside the approved-only export scope. This is the first time both mechanisms (item 11's gate, item 13's export) were exercised together against the same live data. |
+| 2026-07-26 | Re-confirmed (rather than re-litigated from scratch) three criteria already rigorously proven when built: duplicate detection (unique index still rejects a live duplicate insert), delete-removes-stored-file (DELETE policies still exist on both `documents` and `storage.objects`; `deleteDocumentForReplace()`'s code still calls `storage.remove()` before deleting the row), and the cost cap (the live function's actual source still contains the `daily_cost_cap_cents` predicate, via `pg_get_functiondef`) | Nothing regressed. The live `storage.remove()` API call itself remains unverifiable from this sandbox, same acknowledged network gap as when item 15 first built it — re-stated honestly rather than glossed over. |
 |      | Review threshold: 0.9 (field-level; see decisions log — no document ever skips human review) | |
-|      | Field accuracy: | |
-|      | Error catch rate: | |
-|      | Cost per document: | |
+|      | Field accuracy: 80/80 fields matched (100.0%) across all 10 ground-truth documents, verified fresh 2026-07-26. Ground truth is 100% correct by construction, so this measures extraction quality on clean input, not error-catching — that's what error-routing.test.ts is for. | |
+|      | Error catch rate: 100% — all 6 synthetic error scenarios in `worker/test/error-routing.test.ts` (arithmetic mismatch, missing required field, unparseable date, date-order violation, low model confidence alone, multi-error document) correctly route to review, and the clean control case correctly does not. Not a real-world error frequency (none exist in the ground-truth set) — a proof that the routing mechanism itself works. | |
+|      | Cost per document: not yet measured from a real logged `extraction_runs` row — none exist yet, since `check-ground-truth.mjs` calls `extractFields()` directly and never goes through `processDocument()`, so it never logs a run. `computeCostCents()` itself is unit-tested with synthetic token counts (`worker/test/cost.test.ts`); real per-document cost becomes observable via the documents page's cost display once the deployed worker processes real uploads (Phase 6). | |
 
 ## Open questions
 - **Full browser login flow is unverified end-to-end.** RLS isolation itself is rigorously verified (see decisions log), but the literal click-through — sign in via the real /login form, land on /documents, see only your org's document — has only been verified up to the point where the browser calls Supabase (this sandbox can't reach `*.supabase.co` directly to complete it). Worth a 30-second manual check once you have a normal network to run `npm run dev` from, or this naturally gets covered by Phase 6's staging walkthrough. This now also covers the item 10 review page specifically: does the signed-URL preview actually render a PDF/image in a real browser, and does the "Needs attention" flag show up correctly on a real flagged field — same network gap, same fix. Also covers item 14: an actual timed 25-file upload through a real browser (does it feel acceptably fast, does Supabase Storage hold up at that volume) hasn't been run — the database/queue mechanics at that volume are verified live via SQL, the literal click-through isn't.
