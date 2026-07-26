@@ -15,7 +15,7 @@ const EMPTY_FIELD: TemplateField = {
 type TemplateFormProps = {
   initialName?: string;
   initialFields?: TemplateField[];
-  onSubmit: (name: string, fields: TemplateField[]) => Promise<void>;
+  onSubmit: (name: string, fields: TemplateField[]) => Promise<{ error: string } | undefined>;
   submitLabel: string;
 };
 
@@ -48,17 +48,18 @@ export function TemplateForm({
     event.preventDefault();
     setError(null);
     setPending(true);
-    try {
-      await onSubmit(
-        name,
-        fields.map((field) => ({
-          ...field,
-          formatHint: field.formatHint || undefined,
-          validation: field.validation || undefined,
-        })),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+    const result = await onSubmit(
+      name,
+      fields.map((field) => ({
+        ...field,
+        formatHint: field.formatHint || undefined,
+        validation: field.validation || undefined,
+      })),
+    );
+    // No `result` (undefined) means onSubmit succeeded and redirected —
+    // this component has already been torn down by the time that happens.
+    if (result?.error) {
+      setError(result.error);
       setPending(false);
     }
   }

@@ -14,7 +14,7 @@ export function EditForm({
   initialFields: TemplateField[];
 }) {
   async function handleSubmit(name: string, fields: TemplateField[]) {
-    await updateTemplate(id, name, fields);
+    return updateTemplate(id, name, fields);
   }
 
   return (

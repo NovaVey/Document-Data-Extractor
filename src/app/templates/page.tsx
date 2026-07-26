@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { deleteTemplate } from "./actions";
+import { DeleteTemplateButton } from "./delete-template-button";
 import type { TemplateField } from "@/lib/templates/types";
 
 export default async function TemplatesPage() {
@@ -59,14 +59,7 @@ export default async function TemplatesPage() {
                   >
                     Edit
                   </Link>
-                  <form action={deleteTemplate.bind(null, template.id)}>
-                    <button
-                      type="submit"
-                      className="text-sm text-red-600 underline underline-offset-2 dark:text-red-400"
-                    >
-                      Delete
-                    </button>
-                  </form>
+                  <DeleteTemplateButton templateId={template.id} />
                 </div>
               </li>
             );

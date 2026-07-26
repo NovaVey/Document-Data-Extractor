@@ -6,7 +6,7 @@ import type { TemplateField } from "@/lib/templates/types";
 
 export default function NewTemplatePage() {
   async function handleSubmit(name: string, fields: TemplateField[]) {
-    await createTemplate(name, fields);
+    return createTemplate(name, fields);
   }
 
   return (

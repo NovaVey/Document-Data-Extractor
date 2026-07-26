@@ -47,7 +47,13 @@ export async function findDuplicateDocument(fileHash: string): Promise<Duplicate
 // trusting a client-supplied org_id: the id is the only thing the client
 // needs to hand over, everything else about what gets deleted is derived
 // from it under RLS.
-export async function deleteDocumentForReplace(documentId: string): Promise<void> {
+// Returns { error } instead of throwing for expected failures — Next.js
+// redacts thrown Server Action error messages in production ("An error
+// occurred in the Server Components render..."), so throwing here would
+// hide the actual message from the upload form instead of showing it.
+export async function deleteDocumentForReplace(
+  documentId: string,
+): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
   const { data: document } = await supabase
@@ -57,7 +63,7 @@ export async function deleteDocumentForReplace(documentId: string): Promise<void
     .maybeSingle();
 
   if (!document) {
-    throw new Error("Document not found");
+    return { error: "Document not found" };
   }
 
   const { error: storageError } = await supabase.storage
@@ -65,16 +71,17 @@ export async function deleteDocumentForReplace(documentId: string): Promise<void
     .remove([document.storage_path]);
 
   if (storageError) {
-    throw new Error(storageError.message);
+    return { error: storageError.message };
   }
 
   const { error: deleteError } = await supabase.from("documents").delete().eq("id", documentId);
 
   if (deleteError) {
-    throw new Error(deleteError.message);
+    return { error: deleteError.message };
   }
 
   revalidatePath("/documents");
+  return undefined;
 }
 
 type CreateDocumentInput = {
@@ -87,8 +94,12 @@ type CreateDocumentInput = {
 
 // org_id is derived from the caller's own membership, never trusted from
 // the client — the file itself may already be uploaded by this point, but
-// the row is what makes it visible anywhere in the app.
-export async function createDocumentRecord(input: CreateDocumentInput) {
+// the row is what makes it visible anywhere in the app. Returns { error }
+// instead of throwing for expected failures, same reasoning as
+// deleteDocumentForReplace above.
+export async function createDocumentRecord(
+  input: CreateDocumentInput,
+): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
   const { data: membership } = await supabase
@@ -98,7 +109,7 @@ export async function createDocumentRecord(input: CreateDocumentInput) {
     .maybeSingle();
 
   if (!membership) {
-    throw new Error("No organization membership found");
+    return { error: "No organization membership found" };
   }
 
   const { data: inserted, error } = await supabase
@@ -115,7 +126,7 @@ export async function createDocumentRecord(input: CreateDocumentInput) {
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
   // Enqueue: 'uploaded' -> 'queued'. A distinct step (not part of the
@@ -130,8 +141,9 @@ export async function createDocumentRecord(input: CreateDocumentInput) {
     .eq("id", inserted.id);
 
   if (enqueueError) {
-    throw new Error(enqueueError.message);
+    return { error: enqueueError.message };
   }
 
   revalidatePath("/documents");
+  return undefined;
 }

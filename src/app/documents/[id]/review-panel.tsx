@@ -62,14 +62,11 @@ export function ReviewPanel({
     const value = fieldState[fieldKey]?.value ?? "";
     setFieldError((prev) => ({ ...prev, [fieldKey]: "" }));
     startTransition(async () => {
-      try {
-        await saveCorrection(documentId, fieldKey, value);
+      const result = await saveCorrection(documentId, fieldKey, value);
+      if (result?.error) {
+        setFieldError((prev) => ({ ...prev, [fieldKey]: result.error }));
+      } else {
         setFieldState((prev) => ({ ...prev, [fieldKey]: { value, wasCorrected: true } }));
-      } catch (err) {
-        setFieldError((prev) => ({
-          ...prev,
-          [fieldKey]: err instanceof Error ? err.message : "Failed to save",
-        }));
       }
     });
   }
@@ -77,10 +74,9 @@ export function ReviewPanel({
   function handleApprove() {
     setApproveError(null);
     startTransition(async () => {
-      try {
-        await approveDocument(documentId);
-      } catch (err) {
-        setApproveError(err instanceof Error ? err.message : "Failed to approve");
+      const result = await approveDocument(documentId);
+      if (result?.error) {
+        setApproveError(result.error);
       }
     });
   }

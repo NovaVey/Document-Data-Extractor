@@ -49,13 +49,14 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
         .upload(storagePath, entry.file, { contentType: entry.file.type });
       if (uploadError) throw new Error(uploadError.message);
 
-      await createDocumentRecord({
+      const result = await createDocumentRecord({
         originalFilename: entry.file.name,
         storagePath,
         fileHash: entry.hash,
         mimeType: entry.file.type,
         templateId,
       });
+      if (result?.error) throw new Error(result.error);
 
       setResults((prev) => setResult(prev, index, { status: "success", message: undefined }));
     } catch (err) {
@@ -146,7 +147,8 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
   async function handleReplace(index: number, existingDocumentId: string) {
     setResults((prev) => setResult(prev, index, { status: "uploading", message: "Replacing…" }));
     try {
-      await deleteDocumentForReplace(existingDocumentId);
+      const result = await deleteDocumentForReplace(existingDocumentId);
+      if (result?.error) throw new Error(result.error);
       await uploadEntry(index, entriesRef.current[index]);
       router.refresh();
     } catch (err) {
