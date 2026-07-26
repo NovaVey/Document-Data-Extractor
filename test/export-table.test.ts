@@ -1,0 +1,295 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildExportTable,
+  resolveFieldValue,
+  type ExportDocument,
+  type ExportField,
+  type ExportTemplate,
+} from "../src/lib/export/table.js";
+import { toCsv } from "../src/lib/export/csv.js";
+
+function field(overrides: Partial<ExportField> = {}): ExportField {
+  return {
+    document_id: "doc-1",
+    field_key: "total",
+    raw_value: "$100.00",
+    normalized_value: "100.00",
+    was_corrected: false,
+    corrected_value: null,
+    ...overrides,
+  };
+}
+
+describe("resolveFieldValue", () => {
+  it("prefers the correction when one was made", () => {
+    expect(resolveFieldValue(field({ was_corrected: true, corrected_value: "150.00" }))).toBe(
+      "150.00",
+    );
+  });
+
+  it("falls back to the normalized value when uncorrected", () => {
+    expect(resolveFieldValue(field())).toBe("100.00");
+  });
+
+  it("falls back to the raw value when normalized is null (e.g. an invalid or non-calendar field)", () => {
+    expect(resolveFieldValue(field({ normalized_value: null, raw_value: "Due on receipt" }))).toBe(
+      "Due on receipt",
+    );
+  });
+
+  it("returns an empty string when the document has no row for this field", () => {
+    expect(resolveFieldValue(undefined)).toBe("");
+  });
+
+  it("ignores was_corrected if corrected_value is somehow still null", () => {
+    expect(
+      resolveFieldValue(
+        field({ was_corrected: true, corrected_value: null, normalized_value: "100.00" }),
+      ),
+    ).toBe("100.00");
+  });
+});
+
+// The review screen (src/app/documents/[id]/review-panel.tsx) seeds its
+// primary displayed value — the input's value in edit mode, and the plain
+// text shown once a document is approved — from `corrected_value ??
+// raw_value`. It never substitutes normalized_value there; normalized_value
+// only ever appears as a secondary "Normalized: ..." annotation below the
+// field, and only when it differs from raw_value. resolveFieldValue(), by
+// contrast, prefers normalized_value over raw_value for an uncorrected
+// field. These tests replicate the screen's own formula and compare it
+// against resolveFieldValue() for the real ground-truth raw formats
+// (worker/ground-truth/ground-truth.json) to establish exactly when the two
+// agree and when they don't. This does not assert the mismatch is correct
+// behavior — it documents current behavior for review; production code is
+// intentionally left unchanged here (see Phase 4 done-criteria review).
+describe("review screen value vs. export value (uncorrected fields)", () => {
+  // Mirrors review-panel.tsx's `extracted?.corrected_value ?? extracted?.raw_value ?? ""`.
+  function screenValue(f: ExportField): string {
+    return f.corrected_value ?? f.raw_value ?? "";
+  }
+
+  it("agree when the raw date is already ISO (normalization is a no-op)", () => {
+    // riverbend-01 due_date, worker/ground-truth/ground-truth.json
+    const f = field({
+      field_key: "due_date",
+      raw_value: "2026-07-14",
+      normalized_value: "2026-07-14",
+    });
+    expect(screenValue(f)).toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a US-slash date: screen shows the raw slash form, export shows ISO", () => {
+    // riverbend-03 invoice_date, worker/ground-truth/ground-truth.json:
+    // raw "06/28/2026" normalizes (worker/src/validation/parse.ts parseDate) to "2026-06-28".
+    const f = field({
+      field_key: "invoice_date",
+      raw_value: "06/28/2026",
+      normalized_value: "2026-06-28",
+    });
+    expect(screenValue(f)).toBe("06/28/2026");
+    expect(resolveFieldValue(f)).toBe("2026-06-28");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a written-out date: screen shows the prose form, export shows ISO", () => {
+    // riverbend-04 invoice_date, worker/ground-truth/ground-truth.json:
+    // raw "July 5, 2026" normalizes to "2026-07-05".
+    const f = field({
+      field_key: "invoice_date",
+      raw_value: "July 5, 2026",
+      normalized_value: "2026-07-05",
+    });
+    expect(screenValue(f)).toBe("July 5, 2026");
+    expect(resolveFieldValue(f)).toBe("2026-07-05");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a currency amount with a $ sign: screen keeps the symbol, export strips it", () => {
+    // riverbend-01 subtotal, worker/ground-truth/ground-truth.json:
+    // raw "$647.00" normalizes (parseCurrency + toFixed(2), worker/src/validation/validate.ts) to "647.00".
+    const f = field({ field_key: "subtotal", raw_value: "$647.00", normalized_value: "647.00" });
+    expect(screenValue(f)).toBe("$647.00");
+    expect(resolveFieldValue(f)).toBe("647.00");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a currency amount with a thousands comma: screen keeps '$1,320.00', export strips both", () => {
+    // cobalt-01 subtotal, worker/ground-truth/ground-truth.json:
+    // raw "$1,320.00" normalizes to "1320.00".
+    const f = field({ field_key: "subtotal", raw_value: "$1,320.00", normalized_value: "1320.00" });
+    expect(screenValue(f)).toBe("$1,320.00");
+    expect(resolveFieldValue(f)).toBe("1320.00");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("agree on a non-calendar due term (normalized_value is null, both fall back to raw_value)", () => {
+    // Marrow & Finch Print Co. due_date, worker/ground-truth/ground-truth.json: "Due on receipt".
+    const f = field({
+      field_key: "due_date",
+      raw_value: "Due on receipt",
+      normalized_value: null,
+    });
+    expect(screenValue(f)).toBe("Due on receipt");
+    expect(resolveFieldValue(f)).toBe("Due on receipt");
+    expect(screenValue(f)).toBe(resolveFieldValue(f));
+  });
+
+  it("agree once a field is corrected: both screen and export show the human's typed value verbatim", () => {
+    const f = field({
+      field_key: "subtotal",
+      raw_value: "$1,320.00",
+      normalized_value: "1320.00",
+      was_corrected: true,
+      corrected_value: "1320.00",
+    });
+    expect(screenValue(f)).toBe("1320.00");
+    expect(resolveFieldValue(f)).toBe("1320.00");
+    expect(screenValue(f)).toBe(resolveFieldValue(f));
+  });
+});
+
+describe("buildExportTable", () => {
+  const templateA: ExportTemplate = {
+    id: "tmpl-a",
+    name: "Invoices",
+    fields: [
+      { key: "vendor_name", label: "Vendor", type: "text", required: true },
+      { key: "total", label: "Total", type: "currency", required: true },
+    ],
+  };
+  const templateB: ExportTemplate = {
+    id: "tmpl-b",
+    name: "Receipts",
+    fields: [
+      { key: "total", label: "Total", type: "currency", required: true },
+      { key: "store", label: "Store", type: "text", required: false },
+    ],
+  };
+  const templatesById = new Map([
+    [templateA.id, templateA],
+    [templateB.id, templateB],
+  ]);
+
+  function document(overrides: Partial<ExportDocument> = {}): ExportDocument {
+    return {
+      id: "doc-1",
+      original_filename: "invoice.pdf",
+      template_id: templateA.id,
+      uploaded_at: "2026-07-01T00:00:00.000Z",
+      approved_at: "2026-07-02T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("builds metadata columns plus the template's field columns, in order", () => {
+    const { headers, rows } = buildExportTable([document()], templatesById, [
+      field({
+        document_id: "doc-1",
+        field_key: "vendor_name",
+        raw_value: "Acme",
+        normalized_value: "Acme",
+      }),
+      field({
+        document_id: "doc-1",
+        field_key: "total",
+        raw_value: "$100.00",
+        normalized_value: "100.00",
+      }),
+    ]);
+
+    expect(headers).toEqual([
+      "Filename",
+      "Template",
+      "Uploaded At",
+      "Approved At",
+      "Vendor",
+      "Total",
+    ]);
+    expect(rows).toEqual([
+      [
+        "invoice.pdf",
+        "Invoices",
+        "2026-07-01T00:00:00.000Z",
+        "2026-07-02T00:00:00.000Z",
+        "Acme",
+        "100.00",
+      ],
+    ]);
+  });
+
+  it("unions field columns across documents from different templates, deduping shared keys", () => {
+    const { headers, fieldColumns } = buildExportTable(
+      [
+        document({ id: "doc-1", template_id: templateA.id }),
+        document({ id: "doc-2", template_id: templateB.id }),
+      ],
+      templatesById,
+      [],
+    );
+
+    // "total" is shared by both templates and appears once, in first-seen
+    // order; "store" (only on template B) is appended after it.
+    expect(headers).toEqual([
+      "Filename",
+      "Template",
+      "Uploaded At",
+      "Approved At",
+      "Vendor",
+      "Total",
+      "Store",
+    ]);
+    expect(fieldColumns.map((c) => c.key)).toEqual(["vendor_name", "total", "store"]);
+  });
+
+  it("leaves a blank cell when a document's own template doesn't define a unioned column", () => {
+    const { rows } = buildExportTable(
+      [
+        document({ id: "doc-1", template_id: templateA.id }),
+        document({ id: "doc-2", template_id: templateB.id }),
+      ],
+      templatesById,
+      [
+        field({
+          document_id: "doc-2",
+          field_key: "store",
+          raw_value: "Main St",
+          normalized_value: "Main St",
+        }),
+      ],
+    );
+
+    const doc1Row = rows[0];
+    const doc2Row = rows[1];
+    // doc-1 uses template A, which has no "store" field — blank, not undefined/crash.
+    expect(doc1Row[doc1Row.length - 1]).toBe("");
+    expect(doc2Row[doc2Row.length - 1]).toBe("Main St");
+  });
+
+  it("handles a document with no template gracefully", () => {
+    const { rows } = buildExportTable([document({ template_id: null })], templatesById, []);
+    expect(rows[0][1]).toBe(""); // Template column blank, not a crash
+  });
+});
+
+describe("toCsv", () => {
+  it("joins headers and rows with commas and CRLF", () => {
+    expect(toCsv(["A", "B"], [["1", "2"]])).toBe("A,B\r\n1,2\r\n");
+  });
+
+  it("quotes and escapes a field containing a comma", () => {
+    expect(toCsv(["Name"], [["Acme, Inc."]])).toBe('Name\r\n"Acme, Inc."\r\n');
+  });
+
+  it("quotes and doubles internal quotes", () => {
+    expect(toCsv(["Name"], [['Say "hi"']])).toBe('Name\r\n"Say ""hi"""\r\n');
+  });
+
+  it("quotes a field containing a newline", () => {
+    expect(toCsv(["Notes"], [["line1\nline2"]])).toBe('Notes\r\n"line1\nline2"\r\n');
+  });
+
+  it("leaves an ordinary field unquoted", () => {
+    expect(toCsv(["Total"], [["100.00"]])).toBe("Total\r\n100.00\r\n");
+  });
+});

@@ -1,0 +1,208 @@
+{
+  "documents": [
+    {
+      "id": "riverbend-01",
+      "vendor": "Riverbend Supply Co.",
+      "path": "../worker/ground-truth/documents/riverbend-01.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Riverbend Supply Co.",
+        "invoice_number": "INV-10492",
+        "invoice_date": "2026-06-14",
+        "due_date": "2026-07-14",
+        "po_number": "PO-88213",
+        "subtotal": "$647.00",
+        "tax": "$51.76",
+        "total": "$698.76"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "riverbend-02",
+      "vendor": "Riverbend Supply Co.",
+      "path": "../worker/ground-truth/documents/riverbend-02.png",
+      "mime_type": "image/png",
+      "fields": {
+        "vendor_name": "Riverbend Supply Co.",
+        "invoice_number": "INV-10559",
+        "invoice_date": "2026-06-20",
+        "due_date": "2026-07-20",
+        "po_number": "PO-88240",
+        "subtotal": "$529.50",
+        "tax": "$42.36",
+        "total": "$571.86"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "riverbend-03",
+      "vendor": "Riverbend Supply Co.",
+      "path": "../worker/ground-truth/documents/riverbend-03.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Riverbend Supply Co.",
+        "invoice_number": "INV-10601",
+        "invoice_date": "06/28/2026",
+        "due_date": "07/28/2026",
+        "po_number": null,
+        "subtotal": "$372.00",
+        "tax": "$29.76",
+        "total": "$401.76"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "riverbend-04",
+      "vendor": "Riverbend Supply Co.",
+      "path": "../worker/ground-truth/documents/riverbend-04.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Riverbend Supply Co.",
+        "invoice_number": "INV-10650",
+        "invoice_date": "July 5, 2026",
+        "due_date": "August 4, 2026",
+        "po_number": "PO-88301",
+        "subtotal": "$660.00",
+        "tax": "$52.80",
+        "total": "$712.80"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "cobalt-01",
+      "vendor": "Cobalt Ridge Electrical",
+      "path": "../worker/ground-truth/documents/cobalt-01.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Cobalt Ridge Electrical",
+        "invoice_number": "CRE-3021",
+        "invoice_date": "2026-06-10",
+        "due_date": "2026-07-10",
+        "po_number": "WO-5521",
+        "subtotal": "$1,320.00",
+        "tax": "$99.00",
+        "total": "$1,419.00"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "cobalt-02",
+      "vendor": "Cobalt Ridge Electrical",
+      "path": "../worker/ground-truth/documents/cobalt-02.png",
+      "mime_type": "image/png",
+      "fields": {
+        "vendor_name": "Cobalt Ridge Electrical",
+        "invoice_number": "CRE-3095",
+        "invoice_date": "2026-06-25",
+        "due_date": "2026-07-25",
+        "po_number": "WO-5602",
+        "subtotal": "$500.00",
+        "tax": "$37.50",
+        "total": "$537.50"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "cobalt-03",
+      "vendor": "Cobalt Ridge Electrical",
+      "path": "../worker/ground-truth/documents/cobalt-03.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Cobalt Ridge Electrical",
+        "invoice_number": "CRE-3140",
+        "invoice_date": "2026-07-02",
+        "due_date": "2026-08-01",
+        "po_number": "WO-5677",
+        "subtotal": "$2,090.00",
+        "tax": "$156.75",
+        "total": "$2,246.75"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "marrowfinch-01",
+      "vendor": "Marrow & Finch Print Co.",
+      "path": "../worker/ground-truth/documents/marrowfinch-01.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Marrow & Finch Print Co.",
+        "invoice_number": "MF-2209",
+        "invoice_date": "2026-06-18",
+        "due_date": "2026-07-18",
+        "po_number": "4471",
+        "subtotal": "$455.00",
+        "tax": "$37.54",
+        "total": "$492.54"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "marrowfinch-02",
+      "vendor": "Marrow & Finch Print Co.",
+      "path": "../worker/ground-truth/documents/marrowfinch-02.png",
+      "mime_type": "image/png",
+      "fields": {
+        "vendor_name": "Marrow & Finch Print Co.",
+        "invoice_number": "MF-2255",
+        "invoice_date": "2026-06-30",
+        "due_date": "2026-07-30",
+        "po_number": "4498",
+        "subtotal": "$770.00",
+        "tax": "$63.53",
+        "total": "$833.53"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "marrowfinch-03",
+      "vendor": "Marrow & Finch Print Co.",
+      "path": "../worker/ground-truth/documents/marrowfinch-03.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Marrow & Finch Print Co.",
+        "invoice_number": "MF-2301",
+        "invoice_date": "2026-07-08",
+        "due_date": "Due on receipt",
+        "po_number": "4550",
+        "subtotal": "$515.00",
+        "tax": "$42.49",
+        "total": "$557.49"
+      },
+      "source": "ground-truth"
+    },
+    {
+      "id": "cobalt-04",
+      "vendor": "Cobalt Ridge Electrical",
+      "path": "documents/cobalt-04.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Cobalt Ridge Electrical",
+        "invoice_number": "CRE-3201",
+        "invoice_date": "2026-07-15",
+        "due_date": "2026-08-14",
+        "po_number": "WO-5730",
+        "subtotal": "$1,739.50",
+        "tax": "$130.46",
+        "total": "$1,869.96"
+      },
+      "source": "demo-only"
+    },
+    {
+      "id": "marrowfinch-04",
+      "vendor": "Marrow & Finch Print Co.",
+      "path": "documents/marrowfinch-04.pdf",
+      "mime_type": "application/pdf",
+      "fields": {
+        "vendor_name": "Marrow & Finch Print Co.",
+        "invoice_number": "MF-2350",
+        "invoice_date": "2026-07-20",
+        "due_date": "2026-08-19",
+        "po_number": "4601",
+        "subtotal": "$410.00",
+        "tax": "$33.83",
+        "total": "$443.83"
+      },
+      "source": "demo-only"
+    }
+  ]
+}
