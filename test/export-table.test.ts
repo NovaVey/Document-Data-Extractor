@@ -50,6 +50,105 @@ describe("resolveFieldValue", () => {
   });
 });
 
+// The review screen (src/app/documents/[id]/review-panel.tsx) seeds its
+// primary displayed value — the input's value in edit mode, and the plain
+// text shown once a document is approved — from `corrected_value ??
+// raw_value`. It never substitutes normalized_value there; normalized_value
+// only ever appears as a secondary "Normalized: ..." annotation below the
+// field, and only when it differs from raw_value. resolveFieldValue(), by
+// contrast, prefers normalized_value over raw_value for an uncorrected
+// field. These tests replicate the screen's own formula and compare it
+// against resolveFieldValue() for the real ground-truth raw formats
+// (worker/ground-truth/ground-truth.json) to establish exactly when the two
+// agree and when they don't. This does not assert the mismatch is correct
+// behavior — it documents current behavior for review; production code is
+// intentionally left unchanged here (see Phase 4 done-criteria review).
+describe("review screen value vs. export value (uncorrected fields)", () => {
+  // Mirrors review-panel.tsx's `extracted?.corrected_value ?? extracted?.raw_value ?? ""`.
+  function screenValue(f: ExportField): string {
+    return f.corrected_value ?? f.raw_value ?? "";
+  }
+
+  it("agree when the raw date is already ISO (normalization is a no-op)", () => {
+    // riverbend-01 due_date, worker/ground-truth/ground-truth.json
+    const f = field({
+      field_key: "due_date",
+      raw_value: "2026-07-14",
+      normalized_value: "2026-07-14",
+    });
+    expect(screenValue(f)).toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a US-slash date: screen shows the raw slash form, export shows ISO", () => {
+    // riverbend-03 invoice_date, worker/ground-truth/ground-truth.json:
+    // raw "06/28/2026" normalizes (worker/src/validation/parse.ts parseDate) to "2026-06-28".
+    const f = field({
+      field_key: "invoice_date",
+      raw_value: "06/28/2026",
+      normalized_value: "2026-06-28",
+    });
+    expect(screenValue(f)).toBe("06/28/2026");
+    expect(resolveFieldValue(f)).toBe("2026-06-28");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a written-out date: screen shows the prose form, export shows ISO", () => {
+    // riverbend-04 invoice_date, worker/ground-truth/ground-truth.json:
+    // raw "July 5, 2026" normalizes to "2026-07-05".
+    const f = field({
+      field_key: "invoice_date",
+      raw_value: "July 5, 2026",
+      normalized_value: "2026-07-05",
+    });
+    expect(screenValue(f)).toBe("July 5, 2026");
+    expect(resolveFieldValue(f)).toBe("2026-07-05");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a currency amount with a $ sign: screen keeps the symbol, export strips it", () => {
+    // riverbend-01 subtotal, worker/ground-truth/ground-truth.json:
+    // raw "$647.00" normalizes (parseCurrency + toFixed(2), worker/src/validation/validate.ts) to "647.00".
+    const f = field({ field_key: "subtotal", raw_value: "$647.00", normalized_value: "647.00" });
+    expect(screenValue(f)).toBe("$647.00");
+    expect(resolveFieldValue(f)).toBe("647.00");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("disagree for a currency amount with a thousands comma: screen keeps '$1,320.00', export strips both", () => {
+    // cobalt-01 subtotal, worker/ground-truth/ground-truth.json:
+    // raw "$1,320.00" normalizes to "1320.00".
+    const f = field({ field_key: "subtotal", raw_value: "$1,320.00", normalized_value: "1320.00" });
+    expect(screenValue(f)).toBe("$1,320.00");
+    expect(resolveFieldValue(f)).toBe("1320.00");
+    expect(screenValue(f)).not.toBe(resolveFieldValue(f));
+  });
+
+  it("agree on a non-calendar due term (normalized_value is null, both fall back to raw_value)", () => {
+    // Marrow & Finch Print Co. due_date, worker/ground-truth/ground-truth.json: "Due on receipt".
+    const f = field({
+      field_key: "due_date",
+      raw_value: "Due on receipt",
+      normalized_value: null,
+    });
+    expect(screenValue(f)).toBe("Due on receipt");
+    expect(resolveFieldValue(f)).toBe("Due on receipt");
+    expect(screenValue(f)).toBe(resolveFieldValue(f));
+  });
+
+  it("agree once a field is corrected: both screen and export show the human's typed value verbatim", () => {
+    const f = field({
+      field_key: "subtotal",
+      raw_value: "$1,320.00",
+      normalized_value: "1320.00",
+      was_corrected: true,
+      corrected_value: "1320.00",
+    });
+    expect(screenValue(f)).toBe("1320.00");
+    expect(resolveFieldValue(f)).toBe("1320.00");
+    expect(screenValue(f)).toBe(resolveFieldValue(f));
+  });
+});
+
 describe("buildExportTable", () => {
   const templateA: ExportTemplate = {
     id: "tmpl-a",
