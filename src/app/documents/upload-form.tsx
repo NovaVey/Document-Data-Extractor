@@ -193,8 +193,17 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
           ))}
         </select>
       </div>
-      <label htmlFor="file-upload" className="text-sm font-medium">
-        Upload documents (PDF, PNG, or JPEG — up to 20MB each)
+      {/* Plain text, not a <label htmlFor>, so only the "Choose files"
+          button below opens the file picker — clicking this description
+          shouldn't. */}
+      <p className="text-sm font-medium">Upload documents (PDF, PNG, or JPEG — up to 20MB each)</p>
+      <label
+        htmlFor="file-upload"
+        className={`w-fit rounded px-4 py-2 text-sm font-medium text-background ${
+          uploading ? "cursor-not-allowed bg-foreground/50" : "cursor-pointer bg-foreground"
+        }`}
+      >
+        Choose files
       </label>
       <input
         id="file-upload"
@@ -208,7 +217,7 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
           }
           event.target.value = "";
         }}
-        className="w-fit cursor-pointer self-start rounded border border-black/15 text-sm file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-foreground file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-background disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20"
+        className="sr-only"
       />
       {results.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
