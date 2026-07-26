@@ -1,6 +1,7 @@
 import { claimNextDocument } from "./claim.js";
 import { processDocument } from "./process.js";
 import { supabase } from "./supabase.js";
+import { Sentry } from "./sentry.js";
 
 // Runs one queue iteration: claim the next document (if any) and process
 // it. A thrown error from processDocument() is caught here and turns into
@@ -21,6 +22,7 @@ export async function tick(staleAfterMinutes = 10): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[worker] failed ${document.id}: ${message}`);
+    Sentry.captureException(err, { extra: { documentId: document.id } });
     await supabase
       .from("documents")
       .update({ status: "failed", error_message: message })
