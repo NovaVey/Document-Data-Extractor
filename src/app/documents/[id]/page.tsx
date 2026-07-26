@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { statusLabel } from "@/lib/documents/status";
 import type { TemplateField } from "@/lib/templates/types";
 import { ReviewPanel, type ExtractedFieldRow } from "./review-panel";
 
@@ -84,7 +85,7 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
 
         <div className="flex flex-col gap-3">
           <h2 className="text-sm font-medium text-black/60 dark:text-white/60">
-            Extracted fields <span className="text-xs">({document.status})</span>
+            Extracted fields <span className="text-xs">({statusLabel(document.status)})</span>
           </h2>
 
           {document.status === "failed" && (

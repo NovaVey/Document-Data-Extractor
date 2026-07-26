@@ -84,7 +84,7 @@ export function FilterForm({
         Filter
       </button>
       {hasFilters && (
-        <Link href="/documents" className="text-sm underline underline-offset-2">
+        <Link href="/documents" className="py-1.5 text-sm underline underline-offset-2">
           Clear
         </Link>
       )}
