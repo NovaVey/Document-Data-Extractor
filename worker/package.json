@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@sentry/node": "^10.68.0",
     "@supabase/supabase-js": "^2.47.10",
     "unpdf": "^1.8.0"
   },
