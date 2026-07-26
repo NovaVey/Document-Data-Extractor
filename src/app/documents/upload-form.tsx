@@ -208,7 +208,7 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
           }
           event.target.value = "";
         }}
-        className="cursor-pointer rounded border border-black/15 text-sm file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-foreground file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-background disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20"
+        className="w-fit cursor-pointer self-start rounded border border-black/15 text-sm file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-foreground file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-background disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20"
       />
       {results.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">
