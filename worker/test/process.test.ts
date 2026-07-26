@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // vi.hoisted lets this mutable state be shared between the vi.mock
@@ -181,5 +182,27 @@ describe("processDocument", () => {
       /failed to insert extracted fields/i,
     );
     expect(state.documentUpdates).toHaveLength(0);
+  });
+
+  // Phase 3 item 16 (failure isolation): real corrupt/locked PDF bytes,
+  // not a mocked throw — extractPdfText() itself isn't mocked in this
+  // file, so these exercise the actual unpdf parsing failure propagating
+  // all the way out of processDocument(), exactly what tick.ts's catch
+  // has to receive to mark the document failed without affecting anyone
+  // else in the queue.
+  it("propagates the real parsing error for a corrupt PDF", async () => {
+    state.downloadBytes = new Uint8Array(await readFile("test/fixtures/corrupt-invoice.pdf"));
+    await expect(processDocument(baseDocument({ mime_type: "application/pdf" }))).rejects.toThrow(
+      /invalid pdf structure/i,
+    );
+    expect(extractFieldsMock).not.toHaveBeenCalled();
+  });
+
+  it("propagates the real parsing error for a password-locked PDF", async () => {
+    state.downloadBytes = new Uint8Array(await readFile("test/fixtures/locked-invoice.pdf"));
+    await expect(processDocument(baseDocument({ mime_type: "application/pdf" }))).rejects.toThrow(
+      /password/i,
+    );
+    expect(extractFieldsMock).not.toHaveBeenCalled();
   });
 });
