@@ -12,9 +12,11 @@
 // a fully-approved dataset.
 //
 // Requires real network access to this Supabase project's Storage and REST
-// APIs. The sandbox this project was originally built in has no route to
-// either (see WORKFLOW.md's Phase 5 decisions log) — run this from a
-// machine with normal network access, or during Phase 6's deployment.
+// APIs, plus the public internet (to fetch the demo-data files themselves —
+// see fetchDemoDataFile below). The sandbox this project was originally
+// built in has no route to Supabase's data plane at all (see WORKFLOW.md's
+// Phase 5 decisions log) — run this from a machine with normal network
+// access, or from the deployed worker service itself (Railway).
 //
 // MUST run before organizations.is_demo is flipped to true for the demo
 // org: approve_document() needs a genuinely writable org to record a real
@@ -37,15 +39,29 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID, createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { supabase as serviceClient } from "../dist/supabase.js";
 import { claimNextDocument } from "../dist/claim.js";
 import { processDocument } from "../dist/process.js";
 
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEMO_DATA_DIR = path.join(SCRIPT_DIR, "..", "..", "demo-data");
+// Fetched over HTTPS from the (public) GitHub repo rather than read off
+// local disk — this script also needs to run from the deployed worker
+// service itself (Railway's own network access, since this sandbox has
+// none to Supabase Storage), and that service's build context is scoped
+// to worker/ only (its own rootDirectory setting), which never includes
+// the repo-root demo-data/ directory. Fetching by URL works identically
+// whichever way this script is run, local checkout or deployed service.
+const REPO_RAW_BASE =
+  "https://raw.githubusercontent.com/NovaVey/Document-Data-Extractor/main/demo-data/";
+
+async function fetchDemoDataFile(relativePath) {
+  const url = new URL(relativePath, REPO_RAW_BASE).toString();
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
 
 // Matches the row created live and recorded in WORKFLOW.md's Phase 5
 // decisions log. Not a secret — these are meant to be publicly visible on
@@ -71,7 +87,7 @@ if (!url || !anonKey) {
 }
 
 async function main() {
-  const manifest = JSON.parse(await readFile(path.join(DEMO_DATA_DIR, "manifest.json"), "utf8"));
+  const manifest = JSON.parse((await fetchDemoDataFile("manifest.json")).toString("utf8"));
   const manifestById = new Map(manifest.documents.map((doc) => [doc.id, doc]));
 
   const authClient = createClient(url, anonKey);
@@ -117,8 +133,7 @@ async function main() {
   // uploaded -> queued status update. ---
   const documentIds = [];
   for (const doc of manifest.documents) {
-    const filePath = path.join(DEMO_DATA_DIR, doc.path);
-    const bytes = await readFile(filePath);
+    const bytes = await fetchDemoDataFile(doc.path);
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const storagePath = `${orgId}/${randomUUID()}-${path.basename(doc.path)}`;
 
