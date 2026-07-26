@@ -22,6 +22,10 @@ type FileResult = {
   status: "checking" | "pending" | "uploading" | "success" | "error" | "skipped" | "duplicate";
   message?: string;
   duplicateOf?: DuplicateDocument;
+  // Hidden rather than spliced out — indices here have to stay aligned
+  // with entriesRef.current, which handleReplace() reads by the same
+  // index for any row rendered after this one.
+  dismissed?: boolean;
 };
 
 type FileEntry = { file: File; hash: string };
@@ -144,6 +148,15 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
     );
   }
 
+  // Dismisses a row from view only — it doesn't cancel an in-flight
+  // upload (there's no AbortController wiring for that), just hides
+  // finished/errored/duplicate-pending entries the reviewer is done with.
+  // Marks rather than removes so entriesRef.current's indices (read by
+  // handleReplace() for any row still on screen) never shift.
+  function handleRemove(index: number) {
+    setResults((prev) => setResult(prev, index, { dismissed: true }));
+  }
+
   async function handleReplace(index: number, existingDocumentId: string) {
     setResults((prev) => setResult(prev, index, { status: "uploading", message: "Replacing…" }));
     try {
@@ -219,57 +232,71 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
         }}
         className="sr-only"
       />
-      {results.length > 0 && (
+      {results.some((result) => !result.dismissed) && (
         <ul className="flex flex-col gap-1 text-sm">
-          {results.map((result, idx) => (
-            <li key={idx} className="flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-4">
-                <span className="truncate">{result.name}</span>
-                <span
-                  className={
-                    result.status === "error"
-                      ? "text-red-600 dark:text-red-400"
-                      : result.status === "success"
-                        ? "text-green-600 dark:text-green-400"
-                        : result.status === "duplicate"
-                          ? "text-amber-700 dark:text-amber-400"
-                          : "text-black/60 dark:text-white/60"
-                  }
-                >
-                  {result.status === "checking"
-                    ? "Checking…"
-                    : result.status === "pending"
-                      ? "Queued…"
-                      : result.status === "uploading"
-                        ? (result.message ?? "Uploading…")
-                        : (result.message ?? result.status)}
-                </span>
-              </div>
-              {result.status === "duplicate" && result.duplicateOf && (
-                <div className="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs dark:bg-amber-950/20">
-                  <span className="text-black/70 dark:text-white/70">
-                    Duplicate of &quot;{result.duplicateOf.originalFilename}&quot; (
-                    {result.duplicateOf.status}, uploaded{" "}
-                    {new Date(result.duplicateOf.uploadedAt).toLocaleDateString()})
+          {results.map((result, idx) => {
+            if (result.dismissed) return null;
+            return (
+              <li key={idx} className="flex flex-col gap-1">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="truncate">{result.name}</span>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={
+                        result.status === "error"
+                          ? "text-red-600 dark:text-red-400"
+                          : result.status === "success"
+                            ? "text-green-600 dark:text-green-400"
+                            : result.status === "duplicate"
+                              ? "text-amber-700 dark:text-amber-400"
+                              : "text-black/60 dark:text-white/60"
+                      }
+                    >
+                      {result.status === "checking"
+                        ? "Checking…"
+                        : result.status === "pending"
+                          ? "Queued…"
+                          : result.status === "uploading"
+                            ? (result.message ?? "Uploading…")
+                            : (result.message ?? result.status)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(idx)}
+                      aria-label={`Remove ${result.name} from this list`}
+                      title="Remove from list"
+                      className="text-black/40 hover:text-black/70 dark:text-white/40 dark:hover:text-white/70"
+                    >
+                      ×
+                    </button>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleSkip(idx)}
-                    className="rounded border border-black/10 px-2 py-0.5 dark:border-white/15"
-                  >
-                    Skip
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleReplace(idx, result.duplicateOf!.id)}
-                    className="rounded border border-black/10 px-2 py-0.5 dark:border-white/15"
-                  >
-                    Replace existing
-                  </button>
                 </div>
-              )}
-            </li>
-          ))}
+                {result.status === "duplicate" && result.duplicateOf && (
+                  <div className="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs dark:bg-amber-950/20">
+                    <span className="text-black/70 dark:text-white/70">
+                      Duplicate of &quot;{result.duplicateOf.originalFilename}&quot; (
+                      {result.duplicateOf.status}, uploaded{" "}
+                      {new Date(result.duplicateOf.uploadedAt).toLocaleDateString()})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(idx)}
+                      className="rounded border border-black/10 px-2 py-0.5 dark:border-white/15"
+                    >
+                      Skip
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReplace(idx, result.duplicateOf!.id)}
+                      className="rounded border border-black/10 px-2 py-0.5 dark:border-white/15"
+                    >
+                      Replace existing
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
