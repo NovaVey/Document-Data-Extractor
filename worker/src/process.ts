@@ -1,7 +1,8 @@
 import { supabase } from "./supabase.js";
 import { anthropic } from "./anthropic.js";
 import { extractPdfText } from "./extraction/pdf-text.js";
-import { extractFields } from "./extraction/extract.js";
+import { extractFields, MODEL } from "./extraction/extract.js";
+import { computeCostCents } from "./extraction/cost.js";
 import { validateFields } from "./validation/validate.js";
 import { scoreFields } from "./scoring/score.js";
 import { needsAttention } from "./scoring/threshold.js";
@@ -52,7 +53,37 @@ export async function processDocument(document: DocumentRow): Promise<void> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const content = await buildContent(document.mime_type, bytes);
 
-  const extracted = await extractFields(anthropic, fields, content);
+  const startedAt = Date.now();
+  const {
+    fields: extracted,
+    inputTokens,
+    outputTokens,
+  } = await extractFields(anthropic, fields, content);
+  const durationMs = Date.now() - startedAt;
+
+  // Logged as soon as the call itself succeeds, before validation/scoring/
+  // persistence — real money was spent on this call regardless of what
+  // happens next, and item 17's cost cap needs that recorded even if a
+  // later step throws and the document ends up 'failed'.
+  const { count: priorAttempts } = await supabase
+    .from("extraction_runs")
+    .select("id", { count: "exact", head: true })
+    .eq("document_id", document.id);
+
+  const { error: runError } = await supabase.from("extraction_runs").insert({
+    document_id: document.id,
+    attempt: (priorAttempts ?? 0) + 1,
+    model: MODEL,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cost_cents: computeCostCents(inputTokens, outputTokens),
+    duration_ms: durationMs,
+  });
+
+  if (runError) {
+    throw new Error(`failed to log extraction run for ${document.id}: ${runError.message}`);
+  }
+
   const validations = validateFields(fields, extracted);
   const scored = scoreFields(extracted, validations);
   const flaggedCount = scored.filter((field) => needsAttention(field.finalConfidence)).length;

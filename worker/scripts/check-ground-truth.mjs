@@ -73,7 +73,7 @@ async function main() {
       content = { kind: "image", mediaType: doc.mime_type, base64: bytes.toString("base64") };
     }
 
-    const results = await extractFields(client, TEMPLATE, content);
+    const { fields: results } = await extractFields(client, TEMPLATE, content);
     const validations = validateFields(TEMPLATE, results);
     const scored = scoreFields(results, validations);
     const scoredByKey = new Map(scored.map((s) => [s.key, s]));

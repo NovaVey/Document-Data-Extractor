@@ -11,8 +11,11 @@ const state = vi.hoisted(() => ({
   downloadError: null as { message: string } | null,
   insertError: null as { message: string } | null,
   updateError: null as { message: string } | null,
+  runInsertError: null as { message: string } | null,
+  priorRunCount: 0,
   insertedRows: [] as Record<string, unknown>[],
   documentUpdates: [] as Record<string, unknown>[],
+  insertedRuns: [] as Record<string, unknown>[],
 }));
 
 vi.mock("../src/supabase.js", () => ({
@@ -35,6 +38,17 @@ vi.mock("../src/supabase.js", () => ({
           insert: async (rows: Record<string, unknown>[]) => {
             state.insertedRows.push(...rows);
             return { error: state.insertError };
+          },
+        };
+      }
+      if (table === "extraction_runs") {
+        return {
+          select: () => ({
+            eq: async () => ({ count: state.priorRunCount, error: null }),
+          }),
+          insert: async (row: Record<string, unknown>) => {
+            state.insertedRuns.push(row);
+            return { error: state.runInsertError };
           },
         };
       }
@@ -69,6 +83,7 @@ vi.mock("../src/anthropic.js", () => ({ anthropic: {} }));
 const extractFieldsMock = vi.fn();
 vi.mock("../src/extraction/extract.js", () => ({
   extractFields: (...args: unknown[]) => extractFieldsMock(...args),
+  MODEL: "claude-sonnet-5",
 }));
 
 import { processDocument } from "../src/process.js";
@@ -102,12 +117,17 @@ beforeEach(() => {
   state.downloadError = null;
   state.insertError = null;
   state.updateError = null;
+  state.runInsertError = null;
+  state.priorRunCount = 0;
   state.insertedRows = [];
   state.documentUpdates = [];
+  state.insertedRuns = [];
   extractFieldsMock.mockReset();
-  extractFieldsMock.mockResolvedValue([
-    { key: "total", rawValue: "$100.00", modelConfidence: 0.97 },
-  ]);
+  extractFieldsMock.mockResolvedValue({
+    fields: [{ key: "total", rawValue: "$100.00", modelConfidence: 0.97 }],
+    inputTokens: 1000,
+    outputTokens: 200,
+  });
 });
 
 describe("processDocument", () => {
@@ -131,9 +151,11 @@ describe("processDocument", () => {
   });
 
   it("scores a field below the review threshold when the model itself wasn't confident, even though it validates", async () => {
-    extractFieldsMock.mockResolvedValue([
-      { key: "total", rawValue: "$100.00", modelConfidence: 0.5 },
-    ]);
+    extractFieldsMock.mockResolvedValue({
+      fields: [{ key: "total", rawValue: "$100.00", modelConfidence: 0.5 }],
+      inputTokens: 1000,
+      outputTokens: 200,
+    });
     await processDocument(baseDocument());
     expect(state.insertedRows[0]).toMatchObject({
       validation_status: "valid",
@@ -142,14 +164,38 @@ describe("processDocument", () => {
   });
 
   it("forces final_confidence to 0 when a field fails validation, no matter the model's confidence", async () => {
-    extractFieldsMock.mockResolvedValue([
-      { key: "total", rawValue: "not a number", modelConfidence: 0.99 },
-    ]);
+    extractFieldsMock.mockResolvedValue({
+      fields: [{ key: "total", rawValue: "not a number", modelConfidence: 0.99 }],
+      inputTokens: 1000,
+      outputTokens: 200,
+    });
     await processDocument(baseDocument());
     expect(state.insertedRows[0]).toMatchObject({
       validation_status: "invalid",
       final_confidence: 0,
     });
+  });
+
+  it("logs an extraction_runs row with attempt number, model, tokens, cost, and duration", async () => {
+    state.priorRunCount = 2;
+    await processDocument(baseDocument());
+
+    expect(state.insertedRuns).toHaveLength(1);
+    expect(state.insertedRuns[0]).toMatchObject({
+      document_id: "doc-1",
+      attempt: 3,
+      model: "claude-sonnet-5",
+      input_tokens: 1000,
+      output_tokens: 200,
+      cost_cents: 1,
+    });
+    expect(state.insertedRuns[0].duration_ms).toBeTypeOf("number");
+  });
+
+  it("throws when logging the extraction run fails, without inserting extracted fields", async () => {
+    state.runInsertError = { message: "constraint violation" };
+    await expect(processDocument(baseDocument())).rejects.toThrow(/failed to log extraction run/i);
+    expect(state.insertedRows).toHaveLength(0);
   });
 
   it("throws when the document has no template assigned", async () => {

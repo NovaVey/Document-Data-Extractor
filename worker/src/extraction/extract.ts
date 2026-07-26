@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { buildExtractionTool } from "./schema.js";
 import type { ExtractedField, ExtractionContent, TemplateField } from "./types.js";
 
-const MODEL = "claude-sonnet-5";
+export const MODEL = "claude-sonnet-5";
 
 const SYSTEM_PROMPT = `You are extracting structured data from a scanned business document (an invoice, receipt, or similar work order). You will be given the document's content and a list of fields to find.
 
@@ -10,11 +10,21 @@ For each field, transcribe the value exactly as it appears in the document. Do n
 
 Call extract_fields exactly once with your findings for every requested field.`;
 
+export type ExtractionResult = {
+  fields: ExtractedField[];
+  inputTokens: number;
+  outputTokens: number;
+};
+
+// Returns token usage alongside the extracted fields — item 17's per-org
+// cost cap has to know what each real call actually cost, and this is the
+// one place that number is available (Anthropic's response, not something
+// derivable afterward).
 export async function extractFields(
   client: Anthropic,
   fields: TemplateField[],
   content: ExtractionContent,
-): Promise<ExtractedField[]> {
+): Promise<ExtractionResult> {
   const tool = buildExtractionTool(fields);
 
   const userContent: Anthropic.MessageParam["content"] =
@@ -45,7 +55,7 @@ export async function extractFields(
 
   const input = toolUse.input as Record<string, { value?: string; confidence?: number }>;
 
-  return fields.map((field) => {
+  const extractedFields = fields.map((field) => {
     const result = input[field.key];
     return {
       key: field.key,
@@ -53,4 +63,10 @@ export async function extractFields(
       modelConfidence: result?.confidence ?? 0,
     };
   });
+
+  return {
+    fields: extractedFields,
+    inputTokens: message.usage.input_tokens,
+    outputTokens: message.usage.output_tokens,
+  };
 }

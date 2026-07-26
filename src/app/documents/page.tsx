@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgId } from "@/lib/org";
 import { DOCUMENT_STATUSES, statusLabel } from "@/lib/documents/status";
+import { DAILY_COST_CAP_CENTS } from "@/lib/documents/cost-cap";
 import { signOut } from "./actions";
 import { UploadForm } from "./upload-form";
 
@@ -40,6 +41,20 @@ export default async function DocumentsPage({
   const templateNameById = new Map((templates ?? []).map((t) => [t.id, t.name]));
   const hasFilters = Boolean(status || template || q);
 
+  // RLS already scopes extraction_runs to the caller's org (via a join to
+  // documents), same as every other query on this page — no separate
+  // org_id filter needed. "Today" is approximated as UTC midnight; the
+  // actual cap enforcement in claim_next_document() uses the database's
+  // own current_date, which this display doesn't need to match to the
+  // second — it's informational, not the enforcement itself.
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const { data: costRows } = await supabase
+    .from("extraction_runs")
+    .select("cost_cents")
+    .gte("created_at", todayStart.toISOString());
+  const todaysCostCents = (costRows ?? []).reduce((sum, row) => sum + (row.cost_cents ?? 0), 0);
+
   const exportParams = new URLSearchParams();
   if (template) exportParams.set("template", template);
   if (q) exportParams.set("q", q);
@@ -60,6 +75,16 @@ export default async function DocumentsPage({
           </form>
         </div>
       </div>
+
+      <p className="text-xs text-black/60 dark:text-white/60">
+        Today&apos;s extraction cost: ${(todaysCostCents / 100).toFixed(2)} of $
+        {(DAILY_COST_CAP_CENTS / 100).toFixed(2)}
+        {todaysCostCents >= DAILY_COST_CAP_CENTS && (
+          <span className="ml-2 font-medium text-amber-700 dark:text-amber-400">
+            Daily cap reached — new documents will wait until it resets.
+          </span>
+        )}
+      </p>
 
       {orgId ? (
         <UploadForm orgId={orgId} templates={templates ?? []} />

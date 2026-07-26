@@ -68,11 +68,14 @@ async function main() {
 
   const digitalBytes = new Uint8Array(await readFile("test/fixtures/digital-invoice.pdf"));
   const { text } = await extractPdfText(digitalBytes);
-  const textResults = await extractFields(client, INVOICE_TEMPLATE, { kind: "text", text });
+  const { fields: textResults } = await extractFields(client, INVOICE_TEMPLATE, {
+    kind: "text",
+    text,
+  });
   printResults("digital PDF (text mode)", textResults);
 
   const imageBytes = await readFile("test/fixtures/scanned-invoice.png");
-  const imageResults = await extractFields(client, INVOICE_TEMPLATE, {
+  const { fields: imageResults } = await extractFields(client, INVOICE_TEMPLATE, {
     kind: "image",
     mediaType: "image/png",
     base64: imageBytes.toString("base64"),
