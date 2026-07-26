@@ -102,11 +102,13 @@ export default async function DocumentsPage({
           <select
             name="status"
             defaultValue={status ?? ""}
-            className="rounded border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/15"
+            className="rounded border border-black/10 bg-white px-2 py-1 text-sm text-black dark:border-white/15"
           >
-            <option value="">All</option>
+            <option value="" className="text-black">
+              All
+            </option>
             {DOCUMENT_STATUSES.map((s) => (
-              <option key={s} value={s}>
+              <option key={s} value={s} className="text-black">
                 {statusLabel(s)}
               </option>
             ))}
@@ -118,11 +120,13 @@ export default async function DocumentsPage({
           <select
             name="template"
             defaultValue={template ?? ""}
-            className="rounded border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/15"
+            className="rounded border border-black/10 bg-white px-2 py-1 text-sm text-black dark:border-white/15"
           >
-            <option value="">All</option>
+            <option value="" className="text-black">
+              All
+            </option>
             {(templates ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
+              <option key={t.id} value={t.id} className="text-black">
                 {t.name}
               </option>
             ))}

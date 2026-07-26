@@ -182,10 +182,10 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
           value={templateId}
           onChange={(event) => setTemplateId(event.target.value)}
           disabled={uploading}
-          className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+          className="rounded border border-black/15 bg-white px-2 py-1 text-sm text-black dark:border-white/20"
         >
           {templates.map((template) => (
-            <option key={template.id} value={template.id}>
+            <option key={template.id} value={template.id} className="text-black">
               {template.name}
             </option>
           ))}

@@ -112,10 +112,10 @@ export function TemplateForm({
               <select
                 value={field.type}
                 onChange={(event) => updateField(index, { type: event.target.value as FieldType })}
-                className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+                className="rounded border border-black/15 bg-white px-2 py-1 text-sm text-black dark:border-white/20"
               >
                 {FIELD_TYPES.map((type) => (
-                  <option key={type} value={type}>
+                  <option key={type} value={type} className="text-black">
                     {type}
                   </option>
                 ))}
