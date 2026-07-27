@@ -1,7 +1,7 @@
 # Doc Extractor — Build Workflow
 
 **Started:** 2026-07-25
-**Current phase:** 6-7 (deploy sign-off + portfolio packaging — all build phases complete)
+**Current phase:** Complete — all phases (0-8) done
 
 ## Phase 0 — Setup
 - [x] Confirm scope in/out
@@ -70,7 +70,7 @@
 - [x] Env vars verified
 - [x] Queue worker confirmed running in production
 - [x] Staging walkthrough with real batch
-- [ ] Go-ahead for production
+- [x] Go-ahead for production
 - [x] Production deploy
 - [x] Demo account verified logged-out
 - [x] Error tracking, contents excluded
@@ -246,6 +246,7 @@
 | 2026-07-26 | Demo video extended (65s → 78s) to show a deletion actually completing, not just the blocked case | The original cut only demonstrated a *guarded* template delete (blocked — in use) and a duplicate-replace (which deletes under the hood but isn't visually legible as "deletion" mid-replace). Added a segment: create a throwaway "Scratch (delete me)" template with one field, then delete it — the row genuinely vanishes from the Templates list with no error, confirmed frame-by-frame (present at ~65s, gone by ~70s). Re-recorded end to end against a pristine stand-in reset, zero console/page errors. |
 | 2026-07-26 | The 16 screenshots and demo video committed to the repo (`docs/screenshots/`, `docs/demo.mp4`), with a new README "Screenshots" section — at the user's explicit request, superseding the earlier Phase 7 decision to keep them out of the repo as personal marketing material | User asked directly for them to be in the repo (and specifically suggested embedding in the README). PR #8. |
 | 2026-07-27 | PR #7 (Sentry decisions log + the `statusLabel()`/Clear-link fixes) merged to `main`; both Railway services reconnected via `serviceConnect` to force a real rebuild off the merge commit (`bd0ce26`), per this log's own standing lesson that `serviceInstanceDeploy` reuses a stale cached plan. Worker redeploy confirmed clean immediately. The web redeploy's health was genuinely ambiguous for a while: this session's own `railway_deployment_logs` tool returned only a single `Starting Container` line for that deployment for 15+ minutes, with no crash and a build that was byte-for-byte the same shape as every prior success — described honestly to the user as unconfirmed rather than claimed as working. **Resolved**: user pasted the deployment's log directly from the Railway dashboard, showing `✓ Ready in 76ms` — the app had started fine; the `railway_deployment_logs` MCP tool was returning an incomplete/stale log slice for that specific deployment, not reflecting a real hang | Lesson for future deploys on this project: if `railway_deployment_logs` (runtime) appears to return an incomplete tail for a deployment that Railway itself already marks `SUCCESS`, don't treat that as proof of a hung app — cross-check the Railway dashboard directly (or ask the user to) before reporting a problem that may just be this session's own log-retrieval gap. Both services now confirmed running the merged commit. |
+| 2026-07-27 | **User gave explicit go-ahead for production**, closing the last open Phase 6 checklist item. Every other Phase 6 item (hosting, env vars, worker running in prod, staging walkthrough, production deploy tracking `main`, demo-account-logged-out check, error tracking verified end to end, backups deliberately skipped for the portfolio instance) was already done; this was purely the ceremonial sign-off distinct from those, given only after the web service's redeploy was independently confirmed healthy via the user's own Railway dashboard check. All eight phases of this build (0 through 8) are now complete. | Recorded verbatim per this log's own discipline of citing where a decision came from — a plain "yes" in response to being asked directly, with the app/infra state it was granted against fully verified beforehand. |
 
 ## Open questions
 - ~~Sentry dashboard receipt of the 21:38 UTC test event is unconfirmed from this sandbox.~~ **Resolved**: user confirmed the test event appeared in the Sentry Issues feed (no other events were ever sent, so there's no ambiguity about which event they saw). Error tracking is closed end to end: real error → deployed worker's `captureException` → visible in the dashboard.
