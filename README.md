@@ -30,6 +30,32 @@ review workflow (flagged fields, the review queue, exports) freely, but writes
 5. Only **approved** documents are eligible for export, as CSV or XLSX, with
    corrected values in place of the original flagged ones.
 
+## Screenshots
+
+<p>
+  <img src="docs/screenshots/02-documents-queue.png" width="49%" alt="Documents queue with status filters and daily cost cap" />
+  <img src="docs/screenshots/05-review-flagged-field.png" width="49%" alt="Review split view: PDF preview beside extracted fields, one flagged for low confidence" />
+</p>
+<p>
+  <img src="docs/screenshots/12-duplicate-detected.png" width="49%" alt="Duplicate detection on re-upload, with Skip / Replace existing" />
+  <img src="docs/screenshots/15-dark-documents.png" width="49%" alt="Documents queue in dark mode" />
+</p>
+
+Full set of 16 screenshots (login, filters, scanned-image review, corrections,
+approval, batch upload, duplicate replace, template CRUD and delete guard,
+CSV/XLSX export, light and dark themes) in
+[`docs/screenshots/`](docs/screenshots).
+
+### Demo video
+
+<video src="https://github.com/NovaVey/Document-Data-Extractor/raw/main/docs/demo.mp4" controls width="100%"></video>
+
+(If the player above doesn't load, open [`docs/demo.mp4`](docs/demo.mp4)
+directly.) A ~78s walkthrough: login, filter to Needs Review, correct and
+approve a flagged field, upload a document, hit and resolve a duplicate,
+attempt to delete an in-use template (blocked) and delete an unused one
+(succeeds), then export.
+
 ## Why the review gate is real, not cosmetic
 
 - The threshold and validators are unit-tested against a 10-invoice
