@@ -24,3 +24,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Medium-priority audit finding (UX/accessibility): the app had zero
+ * deliberate focus styling anywhere -- every interactive element relied
+ * entirely on the browser's own default focus outline, which varies by
+ * browser/OS (a thin dotted line in some, barely visible against a dark
+ * background in others) rather than a consistent, guaranteed-visible
+ * indicator. :focus-visible (not :focus) so this only shows for keyboard/
+ * programmatic focus, matching the browser's own native behavior of not
+ * showing a ring on a mouse click -- this is additive, not a replacement
+ * for that behavior. #2563eb (Tailwind blue-600) was chosen specifically
+ * because it clears the WCAG 1.4.11 non-text-contrast minimum (3:1)
+ * against both this app's light (#ffffff, 5.17:1) and dark (#0a0a0a,
+ * 3.83:1) backgrounds, so one color works for both themes without a
+ * separate dark-mode override. A single global rule (rather than adding
+ * focus classes to every button/link/input across ~15 files) covers every
+ * current and future interactive element the same way.
+ */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 2px;
+}

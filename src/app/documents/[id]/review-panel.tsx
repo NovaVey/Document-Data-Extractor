@@ -150,7 +150,7 @@ export function ReviewPanel({
               ) : (
                 <p className="text-sm">
                   {state?.value || (
-                    <span className="text-black/40 dark:text-white/40">(not found)</span>
+                    <span className="text-black/60 dark:text-white/60">(not found)</span>
                   )}
                 </p>
               )}
