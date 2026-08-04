@@ -13,6 +13,18 @@ const MONTH_NAMES = [
   "december",
 ];
 
+// Standard 3-letter abbreviations, same index as MONTH_NAMES (May has none
+// distinct from its full name, both 3 letters). "Sept" is a common 4-letter
+// variant but not standard — not worth the ambiguity it'd add.
+const MONTH_ABBREVIATIONS = MONTH_NAMES.map((name) => name.slice(0, 3));
+
+function monthIndexFromName(name: string): number {
+  const lower = name.toLowerCase();
+  const fullIndex = MONTH_NAMES.indexOf(lower);
+  if (fullIndex !== -1) return fullIndex;
+  return MONTH_ABBREVIATIONS.indexOf(lower);
+}
+
 // Common invoice due-terms that are legitimate values for a "date" field
 // without being a calendar date at all. Discovered by building the
 // ground-truth set (item 6) — a real invoice can print "Due on receipt"
@@ -33,16 +45,35 @@ export function isKnownDueTerm(raw: string): boolean {
   return NON_DATE_DUE_TERMS.includes(raw.trim().toLowerCase());
 }
 
+// A bare comma is ambiguous: "1,320" is US thousands-separator notation
+// (-> 1320), but "50,00" is European decimal-comma notation (-> 50.00). A
+// blanket "strip every comma" treats both as thousands separators, silently
+// turning 50,00 into 5000 — a 100x error that passes straight through
+// validation with the model's own high confidence. Disambiguate the same
+// way real-world parsers do: a comma is only a decimal separator when
+// there's no period already in the string AND it's followed by exactly 1-2
+// trailing digits (cents/units are always 1-2 digits; a thousands group is
+// always exactly 3). Anything else — including "1,320" (3 digits after the
+// comma) and any string that already has a period — keeps the original
+// strip-as-thousands-separator behavior.
+function normalizeSeparators(raw: string): string {
+  if (!raw.includes(".") && /,\d{1,2}$/.test(raw)) {
+    return raw.replace(",", ".");
+  }
+  return raw.replace(/,/g, "");
+}
+
 export function parseNumber(raw: string): number | null {
-  const cleaned = raw.replace(/,/g, "").trim();
+  const cleaned = normalizeSeparators(raw.trim());
   if (cleaned === "") return null;
   const value = Number(cleaned);
   return Number.isFinite(value) ? value : null;
 }
 
-// Handles a leading currency symbol, thousands separators, and accounting-
-// style parenthesized negatives ("($50.00)" means -50.00) — common enough
-// on real invoices (credits, adjustments) to be worth the small extra code.
+// Handles a leading currency symbol, thousands/decimal separators (see
+// normalizeSeparators above), and accounting-style parenthesized negatives
+// ("($50.00)" means -50.00) — common enough on real invoices (credits,
+// adjustments) to be worth the small extra code.
 export function parseCurrency(raw: string): number | null {
   let cleaned = raw.trim();
   if (cleaned === "") return null;
@@ -53,7 +84,7 @@ export function parseCurrency(raw: string): number | null {
     cleaned = cleaned.slice(1, -1);
   }
 
-  cleaned = cleaned.replace(/[$,]/g, "").trim();
+  cleaned = normalizeSeparators(cleaned.replace(/\$/g, "").trim());
   const value = Number(cleaned);
   if (!Number.isFinite(value)) return null;
   return negative ? -value : value;
@@ -88,10 +119,10 @@ export function parseDate(raw: string): string | null {
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
 
-  const writtenMatch = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  const writtenMatch = trimmed.match(/^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/);
   if (writtenMatch) {
     const [, monthName, d, y] = writtenMatch;
-    const monthIndex = MONTH_NAMES.indexOf(monthName.toLowerCase());
+    const monthIndex = monthIndexFromName(monthName);
     if (monthIndex === -1) return null;
     const m = monthIndex + 1;
     if (!isValidCalendarDate(+y, m, +d)) return null;

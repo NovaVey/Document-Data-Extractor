@@ -23,6 +23,19 @@ describe("parseNumber", () => {
     expect(parseNumber("twelve")).toBeNull();
     expect(parseNumber("N/A")).toBeNull();
   });
+
+  // Regression: a blanket comma-strip used to turn "50,00" (European
+  // decimal-comma notation) into 5000 — a 100x error that would pass
+  // validation with the model's own high confidence and sail past review.
+  it("treats a comma followed by 1-2 trailing digits as a decimal separator, not a thousands separator", () => {
+    expect(parseNumber("50,00")).toBe(50);
+    expect(parseNumber("50,5")).toBe(50.5);
+  });
+
+  it("still treats a comma followed by exactly 3 digits as a thousands separator", () => {
+    expect(parseNumber("1,320")).toBe(1320);
+    expect(parseNumber("12,000")).toBe(12000);
+  });
 });
 
 describe("parseCurrency", () => {
@@ -48,6 +61,22 @@ describe("parseCurrency", () => {
 
   it("returns null for unparseable text", () => {
     expect(parseCurrency("see attached")).toBeNull();
+  });
+
+  // Same regression as parseNumber above, through the currency path
+  // (leading $ and the parenthesized-negative case both still need to work
+  // alongside the comma/decimal disambiguation).
+  it("treats a comma followed by 1-2 trailing digits as a decimal separator", () => {
+    expect(parseCurrency("$50,00")).toBe(50);
+    expect(parseCurrency("50,00")).toBe(50);
+  });
+
+  it("still treats a comma followed by exactly 3 digits as a thousands separator", () => {
+    expect(parseCurrency("$1,320")).toBe(1320);
+  });
+
+  it("disambiguates correctly even for a negative decimal-comma amount", () => {
+    expect(parseCurrency("($50,00)")).toBe(-50);
   });
 });
 
@@ -86,6 +115,21 @@ describe("parseDate", () => {
 
   it("rejects an unrecognized month name", () => {
     expect(parseDate("Frobtober 5, 2026")).toBeNull();
+  });
+
+  // Regression: MONTH_NAMES only held full names, so a standard 3-letter
+  // abbreviation ("Jan 5, 2026") was rejected outright rather than parsed.
+  it("parses an abbreviated month name", () => {
+    expect(parseDate("Jan 5, 2026")).toBe("2026-01-05");
+    expect(parseDate("Sep 30, 2026")).toBe("2026-09-30");
+  });
+
+  it("parses an abbreviated month name with a trailing period", () => {
+    expect(parseDate("Jan. 5, 2026")).toBe("2026-01-05");
+  });
+
+  it("still rejects a garbled near-miss abbreviation", () => {
+    expect(parseDate("Jax 5, 2026")).toBeNull();
   });
 
   it("returns null for empty input", () => {

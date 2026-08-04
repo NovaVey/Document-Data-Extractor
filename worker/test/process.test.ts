@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // vi.hoisted lets this mutable state be shared between the vi.mock
 // factories below (which vitest hoists above these imports) and the test
@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   insertedRows: [] as Record<string, unknown>[],
   documentUpdates: [] as Record<string, unknown>[],
   insertedRuns: [] as Record<string, unknown>[],
+  upsertOptions: null as Record<string, unknown> | null,
 }));
 
 vi.mock("../src/supabase.js", () => ({
@@ -35,7 +36,8 @@ vi.mock("../src/supabase.js", () => ({
       }
       if (table === "extracted_fields") {
         return {
-          insert: async (rows: Record<string, unknown>[]) => {
+          upsert: async (rows: Record<string, unknown>[], opts: Record<string, unknown>) => {
+            state.upsertOptions = opts;
             state.insertedRows.push(...rows);
             return { error: state.insertError };
           },
@@ -122,6 +124,7 @@ beforeEach(() => {
   state.insertedRows = [];
   state.documentUpdates = [];
   state.insertedRuns = [];
+  state.upsertOptions = null;
   extractFieldsMock.mockReset();
   extractFieldsMock.mockResolvedValue({
     fields: [{ key: "total", rawValue: "$100.00", modelConfidence: 0.97 }],
@@ -148,6 +151,11 @@ describe("processDocument", () => {
     expect(state.documentUpdates).toHaveLength(1);
     expect(state.documentUpdates[0]).toMatchObject({ status: "needs_review" });
     expect(state.documentUpdates[0].processed_at).toBeTypeOf("string");
+    // Idempotent reprocessing depends on this being an upsert against the
+    // real unique index (supabase/migrations/20260727010000_...), not a
+    // plain insert — a reclaimed document must overwrite its own prior
+    // attempt's rows rather than duplicate them.
+    expect(state.upsertOptions).toMatchObject({ onConflict: "document_id,field_key" });
   });
 
   it("scores a field below the review threshold when the model itself wasn't confident, even though it validates", async () => {
@@ -250,5 +258,69 @@ describe("processDocument", () => {
       /password/i,
     );
     expect(extractFieldsMock).not.toHaveBeenCalled();
+  });
+});
+
+// Reclaim-and-reprocess correctness (Phase 9 audit item): a document stuck
+// mid-extraction for longer than claim_next_document()'s stale_after window
+// (10 minutes by default) becomes eligible for a second worker to pick up
+// and reprocess. This heartbeat exists to keep a *genuinely still-running*
+// job's processing_started_at fresh so that doesn't happen to a merely-slow
+// call; the extracted_fields upsert (asserted above) is the complementary
+// fix for when a reclaim happens anyway.
+describe("processDocument — heartbeat", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function heartbeatUpdates() {
+    return state.documentUpdates.filter((u) => "processing_started_at" in u);
+  }
+
+  it("refreshes processing_started_at periodically while a long extraction is in flight", async () => {
+    let resolveExtract!: (value: unknown) => void;
+    extractFieldsMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveExtract = resolve;
+      }),
+    );
+
+    const runPromise = processDocument(baseDocument());
+
+    // Two heartbeat periods elapse while extraction is still "running" —
+    // well under the 10-minute stale_after window this exists to protect
+    // against.
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(heartbeatUpdates().length).toBeGreaterThanOrEqual(2);
+
+    resolveExtract({
+      fields: [{ key: "total", rawValue: "$100.00", modelConfidence: 0.97 }],
+      inputTokens: 1000,
+      outputTokens: 200,
+    });
+    await runPromise;
+  });
+
+  it("stops heartbeating once processing succeeds", async () => {
+    await processDocument(baseDocument());
+    const countAfterSuccess = heartbeatUpdates().length;
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+    expect(heartbeatUpdates().length).toBe(countAfterSuccess);
+  });
+
+  it("stops heartbeating once processing fails", async () => {
+    await expect(processDocument(baseDocument({ mime_type: "application/zip" }))).rejects.toThrow();
+    const countAfterFailure = heartbeatUpdates().length;
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+    expect(heartbeatUpdates().length).toBe(countAfterFailure);
   });
 });
