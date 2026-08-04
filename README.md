@@ -79,7 +79,7 @@ Measured against the 10-document ground-truth fixture (`worker/scripts/check-gro
 | --- | --- |
 | Field accuracy | 80/80 fields matched (100.0%) |
 | Synthetic error catch rate | 6/6 scenarios correctly routed to review (arithmetic mismatch, missing required field, unparseable date, date-order violation, low model confidence, multi-error document) |
-| Review threshold | 0.9 (field-level; a document is never fully "clean" if *any* field is below this) |
+| Review threshold | 0.9 by default (field-level; a document is never fully "clean" if *any* field is below this); overridable per deployment via `REVIEW_CONFIDENCE_THRESHOLD`, enforced by `approve_document()` regardless of which code path calls it |
 | Cost per document | ~1.25¢ average (measured across 12 real documents through the deployed pipeline: min 1¢, max 2¢) |
 
 Ground truth is correct by construction, so field accuracy measures
@@ -134,6 +134,38 @@ Required environment variables (see `.env.example` / `worker/.env.example`):
 
 Apply the migrations in `supabase/migrations/` to a Supabase project before
 running either the app or the worker.
+
+## Onboarding a new organization
+
+There is currently no self-service sign-up flow — creating the first
+user/organization for a deployment of this template is a one-time, manual
+step done with your Supabase project's own tools, not through the app's UI.
+(A self-service invite flow is a known, deliberately deferred backlog item —
+see `WORKFLOW.md`'s decisions log.)
+
+1. **Create the user** — Supabase Dashboard → Authentication → Users → Add
+   user (or the [Admin API](https://supabase.com/docs/reference/javascript/auth-admin-createuser),
+   `supabase.auth.admin.createUser({ email, password })`, using the
+   service-role key). Do **not** insert directly into `auth.users` — that
+   table has internal invariants (password hashing, identity linking) the
+   Admin API/Dashboard handle correctly and a raw insert won't.
+2. **Create the organization and membership** — run once against your
+   project (SQL Editor, or any Postgres client with the service role):
+   ```sql
+   insert into organizations (id, name) values (gen_random_uuid(), 'Your Org Name')
+     returning id; -- note this id for the next statement
+
+   insert into memberships (org_id, user_id, role)
+   values ('<org id from above>', '<user id from step 1>', 'owner');
+   ```
+   `role` is `'owner'` or `'member'` (`memberships.role`) — this column
+   exists in the schema, but the app does not yet differentiate behavior
+   by role (also a deferred item, see `WORKFLOW.md`). Either value works
+   identically today.
+3. **Create a template and sign in** — sign in at `/login` with the
+   credentials from step 1; the first thing to do from there is
+   `/templates/new` to define what fields to extract, since uploading
+   requires picking an existing template.
 
 ## Testing
 

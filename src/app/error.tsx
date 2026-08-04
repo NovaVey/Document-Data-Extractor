@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 
 // Next.js route-segment error boundary: catches any otherwise-uncaught
 // error thrown while rendering a page (or a Client Component nested in
@@ -16,6 +17,15 @@ import Link from "next/link";
 // the Server Components render..."), so there's nothing sensitive left to
 // accidentally leak by displaying it, and doing so matches this app's own
 // standing preference for surfacing real error text over hiding it.
+//
+// Medium-priority audit finding (product/ops): this boundary only logged
+// to the console, even though this app's Sentry setup (src/instrumentation*.ts)
+// is otherwise wired up end to end -- Sentry's Next.js SDK does NOT
+// auto-capture errors caught by an error.tsx boundary (a well-documented
+// gap in how the SDK integrates with the App Router), so without an
+// explicit captureException call here, any error a reviewer actually saw
+// this screen for was invisible in Sentry, the opposite of every other
+// unexpected failure in this codebase.
 export default function Error({
   error,
   reset,
@@ -25,6 +35,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error("[app] unhandled route error:", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

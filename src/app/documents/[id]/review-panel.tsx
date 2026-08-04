@@ -30,11 +30,17 @@ export function ReviewPanel({
   documentStatus,
   templateFields,
   extractedFields,
+  confidenceThreshold,
 }: {
   documentId: string;
   documentStatus: string;
   templateFields: TemplateField[];
   extractedFields: ExtractedFieldRow[];
+  // Resolved server-side (resolveReviewConfidenceThreshold(), which reads
+  // REVIEW_CONFIDENCE_THRESHOLD) and passed down rather than read here
+  // directly -- this is a Client Component, so a plain (non-NEXT_PUBLIC_)
+  // env var wouldn't be available in the browser at all.
+  confidenceThreshold: number;
 }) {
   const fieldsByKey = new Map(extractedFields.map((field) => [field.field_key, field]));
 
@@ -85,7 +91,9 @@ export function ReviewPanel({
     const extracted = fieldsByKey.get(field.key);
     const finalConfidence = extracted?.final_confidence ?? null;
     const corrected = fieldState[field.key]?.wasCorrected ?? false;
-    return finalConfidence !== null && needsAttention(finalConfidence) && !corrected;
+    return (
+      finalConfidence !== null && needsAttention(finalConfidence, confidenceThreshold) && !corrected
+    );
   }).length;
 
   return (
@@ -96,7 +104,9 @@ export function ReviewPanel({
           const finalConfidence = extracted?.final_confidence ?? null;
           const state = fieldState[field.key];
           const flagged =
-            finalConfidence !== null && needsAttention(finalConfidence) && !state?.wasCorrected;
+            finalConfidence !== null &&
+            needsAttention(finalConfidence, confidenceThreshold) &&
+            !state?.wasCorrected;
           const rawValue = extracted?.raw_value?.trim() ?? "";
           const showNormalized =
             extracted?.normalized_value != null && extracted.normalized_value !== rawValue;

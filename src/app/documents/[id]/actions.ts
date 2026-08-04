@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { resolveReviewConfidenceThreshold } from "@/lib/review/threshold";
 
 // corrected_by is never taken from the caller — derived from the
 // authenticated session and enforced again by the RLS with-check clause
@@ -54,7 +55,10 @@ export async function saveCorrection(
 export async function approveDocument(documentId: string): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
-  const { error } = await supabase.rpc("approve_document", { p_document_id: documentId });
+  const { error } = await supabase.rpc("approve_document", {
+    p_document_id: documentId,
+    p_confidence_threshold: resolveReviewConfidenceThreshold(),
+  });
 
   if (error) {
     return { error: error.message };

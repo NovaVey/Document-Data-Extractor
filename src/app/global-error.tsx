@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
+
 // Catches an error thrown by the root layout itself (font loading, the
 // layout component's own render) -- rare here, since layout.tsx is just
 // font variables and a wrapper, but the one class of error error.tsx
@@ -11,6 +14,11 @@
 // the way the rest of the app does, so it stays deliberately plain
 // (system font, one light-mode-only palette) rather than half-matching
 // the real design.
+//
+// Sentry.captureException here is the officially documented integration
+// point for global-error.tsx (Sentry's Next.js SDK does not auto-capture
+// App Router error-boundary errors) -- see error.tsx's own comment for
+// the same gap one level down.
 export default function GlobalError({
   error,
   reset,
@@ -18,6 +26,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+
   return (
     <html lang="en">
       <body

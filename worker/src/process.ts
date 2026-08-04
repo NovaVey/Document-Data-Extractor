@@ -5,7 +5,7 @@ import { extractFields, MODEL } from "./extraction/extract.js";
 import { computeCostCents } from "./extraction/cost.js";
 import { validateFields } from "./validation/validate.js";
 import { scoreFields } from "./scoring/score.js";
-import { needsAttention } from "./scoring/threshold.js";
+import { needsAttention, resolveReviewConfidenceThreshold } from "./scoring/threshold.js";
 import type { DocumentRow } from "./types.js";
 import type { ExtractionContent, TemplateField } from "./extraction/types.js";
 
@@ -121,7 +121,10 @@ async function processDocumentInner(document: DocumentRow): Promise<void> {
 
   const validations = validateFields(fields, extracted);
   const scored = scoreFields(extracted, validations);
-  const flaggedCount = scored.filter((field) => needsAttention(field.finalConfidence)).length;
+  const confidenceThreshold = resolveReviewConfidenceThreshold();
+  const flaggedCount = scored.filter((field) =>
+    needsAttention(field.finalConfidence, confidenceThreshold),
+  ).length;
 
   // Upsert, not a plain insert: a reclaimed-and-reprocessed document (stale
   // recovery, or a race the heartbeat above doesn't fully close) must
