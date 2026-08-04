@@ -316,9 +316,7 @@ describe("processDocument — heartbeat", () => {
   });
 
   it("stops heartbeating once processing fails", async () => {
-    await expect(
-      processDocument(baseDocument({ mime_type: "application/zip" })),
-    ).rejects.toThrow();
+    await expect(processDocument(baseDocument({ mime_type: "application/zip" }))).rejects.toThrow();
     const countAfterFailure = heartbeatUpdates().length;
 
     await vi.advanceTimersByTimeAsync(5 * 60_000);
