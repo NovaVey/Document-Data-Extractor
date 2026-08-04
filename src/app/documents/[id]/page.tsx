@@ -26,25 +26,28 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
     notFound();
   }
 
-  const [{ data: template }, { data: extractedFields }, { data: signedUrlData }] =
-    await Promise.all([
-      document.template_id
-        ? supabase
-            .from("extraction_templates")
-            .select("fields")
-            .eq("id", document.template_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("extracted_fields")
-        .select(
-          "field_key, raw_value, normalized_value, model_confidence, final_confidence, validation_status, validation_notes, was_corrected, corrected_value",
-        )
-        .eq("document_id", document.id),
-      supabase.storage
-        .from("documents")
-        .createSignedUrl(document.storage_path, SIGNED_URL_TTL_SECONDS),
-    ]);
+  const [
+    { data: template, error: templateError },
+    { data: extractedFields },
+    { data: signedUrlData },
+  ] = await Promise.all([
+    document.template_id
+      ? supabase
+          .from("extraction_templates")
+          .select("fields")
+          .eq("id", document.template_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    supabase
+      .from("extracted_fields")
+      .select(
+        "field_key, raw_value, normalized_value, model_confidence, final_confidence, validation_status, validation_notes, was_corrected, corrected_value",
+      )
+      .eq("document_id", document.id),
+    supabase.storage
+      .from("documents")
+      .createSignedUrl(document.storage_path, SIGNED_URL_TTL_SECONDS),
+  ]);
 
   const templateFields = (template?.fields as TemplateField[] | undefined) ?? [];
   const isProcessed = document.status === "needs_review" || document.status === "approved";
@@ -100,7 +103,13 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
             </p>
           )}
 
-          {isProcessed && templateFields.length === 0 && (
+          {isProcessed && templateError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              Could not load this document&apos;s template: {templateError.message}
+            </p>
+          )}
+
+          {isProcessed && !templateError && templateFields.length === 0 && (
             <p className="text-sm text-black/60 dark:text-white/60">
               This document&apos;s template has no fields defined.
             </p>

@@ -34,7 +34,12 @@ export default async function DocumentsPage({
 
   const { data: documents, error } = await query;
 
-  const { data: templates } = await supabase
+  // Errors on these two are captured too (not just the main list query
+  // above) — a failed templates fetch used to render identically to
+  // "this org genuinely has no templates yet" (empty array either way),
+  // and a failed cost query used to silently show "$0.00 of $5.00" as if
+  // nothing had been spent, both misleading during a real outage.
+  const { data: templates, error: templatesError } = await supabase
     .from("extraction_templates")
     .select("id, name")
     .order("name");
@@ -50,7 +55,7 @@ export default async function DocumentsPage({
   // second — it's informational, not the enforcement itself.
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
-  const { data: costRows } = await supabase
+  const { data: costRows, error: costError } = await supabase
     .from("extraction_runs")
     .select("cost_cents")
     .gte("created_at", todayStart.toISOString());
@@ -77,15 +82,27 @@ export default async function DocumentsPage({
         </div>
       </div>
 
-      <p className="text-xs text-black/60 dark:text-white/60">
-        Today&apos;s extraction cost: ${(todaysCostCents / 100).toFixed(2)} of $
-        {(DAILY_COST_CAP_CENTS / 100).toFixed(2)}
-        {todaysCostCents >= DAILY_COST_CAP_CENTS && (
-          <span className="ml-2 font-medium text-amber-700 dark:text-amber-400">
-            Daily cap reached — new documents will wait until it resets.
-          </span>
-        )}
-      </p>
+      {costError ? (
+        <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+          Could not load today&apos;s extraction cost: {costError.message}
+        </p>
+      ) : (
+        <p className="text-xs text-black/60 dark:text-white/60">
+          Today&apos;s extraction cost: ${(todaysCostCents / 100).toFixed(2)} of $
+          {(DAILY_COST_CAP_CENTS / 100).toFixed(2)}
+          {todaysCostCents >= DAILY_COST_CAP_CENTS && (
+            <span className="ml-2 font-medium text-amber-700 dark:text-amber-400">
+              Daily cap reached — new documents will wait until it resets.
+            </span>
+          )}
+        </p>
+      )}
+
+      {templatesError && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          Could not load templates: {templatesError.message}
+        </p>
+      )}
 
       {orgId ? (
         <UploadForm orgId={orgId} templates={templates ?? []} />

@@ -93,7 +93,7 @@
 A 6-dimension, adversarially-verified codebase audit (44 confirmed findings: security, correctness/tests, code quality, performance, UX/accessibility, product/ops readiness) run after Phase 8. Working through the 10 high-priority items; medium/low-priority items are a backlog, not tracked here item-by-item.
 - [x] Security: documents INSERT policy + extracted_fields UPDATE grant closed
 - [ ] Correctness: DAILY_COST_CAP_CENTS guard, parseCurrency/parseDate fixes, idempotent stale-reclaim
-- [ ] UX: aria-live/role=alert, template-delete confirmation, consistent Server Component error handling
+- [x] UX: aria-live/role=alert, template-delete confirmation, consistent Server Component error handling
 - [ ] Product: append-only audit log for corrections/approvals
 - [ ] Product: self-service invite flow — deferred, needs user design decisions first (large item, not started)
 
