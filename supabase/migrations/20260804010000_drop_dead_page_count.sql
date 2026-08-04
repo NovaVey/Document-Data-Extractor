@@ -1,0 +1,18 @@
+-- Medium-priority audit finding (code quality): documents.page_count was
+-- declared in the original Phase 2 migration but never actually wired up.
+-- The one place a page count is genuinely computed — extractPdfText()
+-- (worker/src/extraction/pdf-text.ts) — has its result destructured down
+-- to `{ text }` at the only call site (worker/src/process.ts), so the
+-- computed value never reaches this column; the only UPDATE to `documents`
+-- after processing sets `status`/`processed_at` only. Nothing ever reads
+-- it either: every SELECT against `documents` across the app and worker
+-- lists its columns explicitly, and page_count is never among them, so it
+-- has been silently NULL on every row since the table existed.
+--
+-- Confirmed live before writing this migration: all 12 real rows have
+-- page_count = NULL (count(page_count) = 0 while count(*) = 12), and
+-- nothing else in the database depends on it — zero pg_depend entries
+-- against the column, zero functions whose source mentions it, zero RLS
+-- policies referencing it. A dry run of this exact statement (rolled back)
+-- confirmed the drop is clean.
+alter table documents drop column page_count;

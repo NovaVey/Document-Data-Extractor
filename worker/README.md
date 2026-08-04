@@ -18,23 +18,36 @@ staleness window is treated as an abandoned/crashed attempt and reclaimed
 automatically — no row can get stuck forever because a worker process died
 mid-attempt.
 
-The actual extraction logic (`src/process.ts`) is currently a placeholder —
-real extraction, validation, and confidence scoring land in later build
-items. This skeleton only proves the queue mechanics: enqueue, claim,
-status transitions, crash recovery.
+`src/process.ts` runs the full pipeline: downloads the file from storage,
+extracts fields via the Anthropic API (`src/extraction/`), validates and
+confidence-scores them (`src/validation/`, `src/scoring/`), records
+cost/usage in `extraction_runs`, and upserts the results into
+`extracted_fields` before moving the document to `needs_review`. A
+heartbeat (`src/process.ts`) periodically refreshes `processing_started_at`
+so a long-running call isn't mistaken for a stale/crashed attempt.
 
 ## Running locally
 
 ```bash
 cd worker
 npm install
-cp .env.example .env   # fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+cp .env.example .env   # fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and ANTHROPIC_API_KEY
 npm run build
 npm start
 ```
 
+All three are required — the worker throws on startup without either of the
+first two (`src/supabase.ts`, `src/anthropic.ts`), and on the first
+extraction call without the third. `SUPABASE_ANON_KEY` is only needed by
+`scripts/seed-demo.mjs`, never by the deployed worker itself. `SENTRY_DSN`
+and `DAILY_COST_CAP_CENTS` are optional — Sentry no-ops if unset, and the
+cost cap defaults to 500 cents/day (`src/claim.ts`). See `.env.example` for
+the full list.
+
 ## Deployment
 
 Deployed as its own Railway service, root directory `worker/`, build command
-`npm run build`, start command `npm start`. Needs the same two environment
-variables as local dev, set in Railway rather than a `.env` file.
+`npm run build`, start command `npm start`. Needs the same environment
+variables as local dev (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+`ANTHROPIC_API_KEY` required; `SENTRY_DSN` and `DAILY_COST_CAP_CENTS`
+optional), set in Railway rather than a `.env` file.

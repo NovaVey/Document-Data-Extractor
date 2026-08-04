@@ -39,7 +39,6 @@ function document(overrides: Partial<DocumentRow> = {}): DocumentRow {
     original_filename: "invoice.png",
     file_hash: "hash",
     mime_type: "image/png",
-    page_count: null,
     status: "processing",
     error_message: null,
     uploaded_at: "2026-07-25T00:00:00Z",
