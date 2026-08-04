@@ -1,3 +1,5 @@
+import { neutralizeFormula } from "./table";
+
 // Quotes a field only when it needs it (contains a comma, quote, or
 // newline), doubling any internal quotes — the standard CSV escaping rule.
 function csvEscape(value: string): string {
@@ -5,5 +7,9 @@ function csvEscape(value: string): string {
 }
 
 export function toCsv(headers: string[], rows: string[][]): string {
-  return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\r\n") + "\r\n";
+  return (
+    [headers, ...rows]
+      .map((row) => row.map((cell) => csvEscape(neutralizeFormula(cell))).join(","))
+      .join("\r\n") + "\r\n"
+  );
 }

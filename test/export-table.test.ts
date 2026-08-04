@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildExportTable,
+  neutralizeFormula,
   resolveFieldValue,
   type ExportDocument,
   type ExportField,
@@ -291,5 +292,59 @@ describe("toCsv", () => {
 
   it("leaves an ordinary field unquoted", () => {
     expect(toCsv(["Total"], [["100.00"]])).toBe("Total\r\n100.00\r\n");
+  });
+
+  // CWE-1236: a cell beginning with =, +, -, or @ would be evaluated as a
+  // formula by Excel/Sheets/LibreOffice on open — e.g. a corrected vendor
+  // name of "=cmd|'/c calc'!A1" would execute in the reviewer's spreadsheet
+  // app. toCsv applies the same apostrophe-prefix mitigation the export
+  // route uses for XLSX, so both formats are covered by the same tests here.
+  it("neutralizes a formula-leading cell with a leading apostrophe", () => {
+    expect(toCsv(["Vendor"], [["=cmd|'/c calc'!A1"]])).toBe("Vendor\r\n'=cmd|'/c calc'!A1\r\n");
+  });
+
+  it("neutralizes +, -, and @ leading cells the same way", () => {
+    expect(toCsv(["A", "B", "C"], [["+1+1", "-2+3", "@SUM(A1)"]])).toBe(
+      "A,B,C\r\n'+1+1,'-2+3,'@SUM(A1)\r\n",
+    );
+  });
+
+  it("neutralizes a formula-leading header, since template field labels are also user-controlled", () => {
+    expect(toCsv(["=SUM(A1:A9)"], [["x"]])).toBe("'=SUM(A1:A9)\r\nx\r\n");
+  });
+
+  it("still quotes a neutralized cell that also needs comma/quote escaping", () => {
+    expect(toCsv(["Vendor"], [['=HYPERLINK("http://evil")']])).toBe(
+      'Vendor\r\n"\'=HYPERLINK(""http://evil"")"\r\n',
+    );
+  });
+
+  it("leaves an ordinary negative number looking string alone unless it's exactly a leading minus", () => {
+    // Still gets neutralized — CSV has no cell-type metadata to distinguish
+    // "legitimate negative number" from "formula," so a leading '-' is
+    // always neutralized in this format. This documents that tradeoff.
+    expect(toCsv(["Total"], [["-100.00"]])).toBe("Total\r\n'-100.00\r\n");
+  });
+});
+
+describe("neutralizeFormula", () => {
+  it("prefixes a value starting with =, +, -, or @ with a leading apostrophe", () => {
+    expect(neutralizeFormula("=1+1")).toBe("'=1+1");
+    expect(neutralizeFormula("+1+1")).toBe("'+1+1");
+    expect(neutralizeFormula("-1+1")).toBe("'-1+1");
+    expect(neutralizeFormula("@SUM(A1:A9)")).toBe("'@SUM(A1:A9)");
+  });
+
+  it("leaves an ordinary value unchanged", () => {
+    expect(neutralizeFormula("Acme Corp")).toBe("Acme Corp");
+    expect(neutralizeFormula("100.00")).toBe("100.00");
+  });
+
+  it("leaves an empty string unchanged", () => {
+    expect(neutralizeFormula("")).toBe("");
+  });
+
+  it("only inspects the first character, not = anywhere in the value", () => {
+    expect(neutralizeFormula("Total=100")).toBe("Total=100");
   });
 });

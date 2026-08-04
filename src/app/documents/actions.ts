@@ -112,6 +112,25 @@ export async function createDocumentRecord(
     return { error: "No organization membership found" };
   }
 
+  // Fast-fail check ahead of the real enforcement: the database's own
+  // INSERT policy (supabase/migrations/20260804000000_template_org_scoping.sql)
+  // rejects a template_id that doesn't belong to this org regardless of
+  // this check, so a crafted request can't skip it — this just turns that
+  // into a clear message instead of a raw RLS-violation error string. The
+  // app's own UI can never actually hit this (the template dropdown only
+  // ever offers templates already scoped to this org), so this only fires
+  // for a request that bypassed the UI.
+  const { data: template } = await supabase
+    .from("extraction_templates")
+    .select("id")
+    .eq("id", input.templateId)
+    .eq("org_id", membership.org_id)
+    .maybeSingle();
+
+  if (!template) {
+    return { error: "Template not found" };
+  }
+
   const { data: inserted, error } = await supabase
     .from("documents")
     .insert({
