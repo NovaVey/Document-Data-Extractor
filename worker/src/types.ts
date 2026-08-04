@@ -9,7 +9,6 @@ export type DocumentRow = {
   original_filename: string;
   file_hash: string;
   mime_type: string;
-  page_count: number | null;
   status: DocumentStatus;
   error_message: string | null;
   uploaded_at: string;
