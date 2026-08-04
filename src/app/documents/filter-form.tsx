@@ -1,16 +1,28 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { DOCUMENT_STATUSES, statusLabel } from "@/lib/documents/status";
 
 type Template = { id: string; name: string };
 
+const AUTO_SUBMIT_DEBOUNCE_MS = 400;
+
 // Status/Template auto-submit on change (a plain GET form still — just
 // triggered by JS instead of requiring an extra click on "Filter") since
 // picking a value from a dropdown and having nothing visibly happen
-// reads as broken. Filename stays manual-submit: auto-submitting on
-// every keystroke would fight the reviewer while they're still typing.
+// reads as broken. Debounced rather than submitting on the raw change
+// event: a keyboard user arrowing through a *closed* native <select>
+// fires one change event per keypress (only a mouse click, or opening
+// the dropdown with the keyboard and pressing Enter, produces a single
+// change) — undebounced, every arrow press would trigger a full page
+// navigation mid-selection, interrupting the act of choosing a value
+// entirely (a WCAG 3.2.2 "On Input" violation). Debouncing means only
+// the value the user actually settles on gets submitted, while a mouse
+// click still applies the filter almost immediately. Filename stays
+// fully manual-submit (no debounce or auto-submit at all): auto-
+// submitting on every keystroke would fight the reviewer while they're
+// still typing, debounced or not.
 export function FilterForm({
   status,
   template,
@@ -25,6 +37,20 @@ export function FilterForm({
   hasFilters: boolean;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  function scheduleAutoSubmit() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      formRef.current?.requestSubmit();
+    }, AUTO_SUBMIT_DEBOUNCE_MS);
+  }
 
   return (
     <form ref={formRef} className="flex flex-wrap items-end gap-3" method="get">
@@ -33,7 +59,7 @@ export function FilterForm({
         <select
           name="status"
           defaultValue={status ?? ""}
-          onChange={() => formRef.current?.requestSubmit()}
+          onChange={scheduleAutoSubmit}
           className="rounded border border-black/10 bg-white px-2 py-1 text-sm text-black dark:border-white/15"
         >
           <option value="" className="text-black">
@@ -52,7 +78,7 @@ export function FilterForm({
         <select
           name="template"
           defaultValue={template ?? ""}
-          onChange={() => formRef.current?.requestSubmit()}
+          onChange={scheduleAutoSubmit}
           className="rounded border border-black/10 bg-white px-2 py-1 text-sm text-black dark:border-white/15"
         >
           <option value="" className="text-black">
