@@ -93,20 +93,25 @@ export function TemplateForm({
             key={index}
             className="flex flex-col gap-2 rounded border border-black/10 p-3 dark:border-white/15"
           >
-            <div className="flex gap-2">
+            {/* flex-col below sm: two w-1/2 inputs at 375px left each one
+                only ~170px wide, clipping placeholders like "key (e.g.
+                invoice_number)" down to a few visible characters -- full-
+                width and stacked reads properly on a phone; side-by-side
+                from sm: up matches the original desktop layout exactly. */}
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 required
                 value={field.key}
                 onChange={(event) => updateField(index, { key: event.target.value })}
                 placeholder="key (e.g. invoice_number)"
-                className="w-1/2 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+                className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
               <input
                 required
                 value={field.label}
                 onChange={(event) => updateField(index, { label: event.target.value })}
                 placeholder="Label (e.g. Invoice Number)"
-                className="w-1/2 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+                className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
             </div>
             <div className="flex items-center gap-3">
@@ -137,18 +142,18 @@ export function TemplateForm({
                 Remove
               </button>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 value={field.formatHint ?? ""}
                 onChange={(event) => updateField(index, { formatHint: event.target.value })}
                 placeholder="Format hint (optional, e.g. MM/DD/YYYY)"
-                className="w-1/2 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+                className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
               <input
                 value={field.validation ?? ""}
                 onChange={(event) => updateField(index, { validation: event.target.value })}
                 placeholder="Validation note (optional)"
-                className="w-1/2 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20"
+                className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
             </div>
           </div>
