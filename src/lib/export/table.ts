@@ -24,6 +24,32 @@ export type ExportFieldColumn = { key: string; label: string; type: FieldType };
 const METADATA_HEADERS = ["Filename", "Template", "Uploaded At", "Approved At"];
 export const EXPORT_METADATA_COLUMN_COUNT = METADATA_HEADERS.length;
 
+// CSV/XLSX formula injection (CWE-1236): a cell value beginning with =, +,
+// -, or @ is interpreted by Excel/Sheets/LibreOffice as a formula rather
+// than literal text once the cell is opened or edited. Nothing stops a
+// document's raw_value/corrected_value from containing one of these —
+// original_filename is attacker-controlled at upload time, template names
+// and field values are typed by whoever created the template or corrected
+// the field — so a value like "=cmd|'/c calc'!A1" would execute in
+// whichever spreadsheet app the export is opened in. A leading apostrophe
+// is the standard mitigation (OWASP CSV Injection): spreadsheet apps treat
+// a leading `'` as "force text," so the cell renders the value verbatim
+// instead of evaluating it.
+//
+// Applied to every *string* cell in both export formats — CSV has no
+// per-cell type metadata to fall back on, and XLSX string cells get the
+// same treatment defensively even though write-excel-file writes them as
+// genuine text cells (some spreadsheet apps still auto-detect a leading
+// operator as a formula on open/edit regardless of stored cell type). Real
+// numeric/currency cells in the XLSX path are written as actual JS
+// numbers, not strings — callers must not run this on those, since it
+// would turn a legitimate negative number like "-100.00" into text.
+const FORMULA_LEADING_CHARS = new Set(["=", "+", "-", "@"]);
+
+export function neutralizeFormula(value: string): string {
+  return value.length > 0 && FORMULA_LEADING_CHARS.has(value[0]) ? `'${value}` : value;
+}
+
 // A human correction is authoritative once made — it's what a reviewer
 // explicitly looked at and confirmed, so it's trusted verbatim rather than
 // re-run through the same deterministic parser that wasn't enough to

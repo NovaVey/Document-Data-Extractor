@@ -4,6 +4,7 @@ import type { TemplateField } from "@/lib/templates/types";
 import {
   buildExportTable,
   EXPORT_METADATA_COLUMN_COUNT,
+  neutralizeFormula,
   type ExportField,
   type ExportTemplate,
 } from "@/lib/export/table";
@@ -80,17 +81,21 @@ export async function GET(request: Request) {
   // Number/currency columns get written as real numeric cells (not text)
   // so the export is actually usable as a spreadsheet — summable,
   // formattable — rather than just a table that happens to render in one.
+  // Every other cell stays a string and goes through neutralizeFormula
+  // first (CWE-1236) — a real numeric cell is a JS number, never a string
+  // starting with =/+/-/@, so it's unaffected either way.
   const sheetData = [
-    headers,
+    headers.map(neutralizeFormula),
     ...rows.map((row) =>
       row.map((value, index) => {
-        if (index < EXPORT_METADATA_COLUMN_COUNT) return value;
-        const column = fieldColumns[index - EXPORT_METADATA_COLUMN_COUNT];
-        if (column && (column.type === "number" || column.type === "currency") && value !== "") {
-          const numeric = Number(value);
-          if (Number.isFinite(numeric)) return numeric;
+        if (index >= EXPORT_METADATA_COLUMN_COUNT) {
+          const column = fieldColumns[index - EXPORT_METADATA_COLUMN_COUNT];
+          if (column && (column.type === "number" || column.type === "currency") && value !== "") {
+            const numeric = Number(value);
+            if (Number.isFinite(numeric)) return numeric;
+          }
         }
-        return value;
+        return neutralizeFormula(value);
       }),
     ),
   ];
