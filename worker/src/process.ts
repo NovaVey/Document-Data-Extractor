@@ -11,6 +11,32 @@ import type { ExtractionContent, TemplateField } from "./extraction/types.js";
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
+// Refreshes processing_started_at while a document is genuinely still being
+// worked on, well under claim_next_document()'s stale_after window
+// (10 minutes by default) — without this, a real API call that happens to
+// run long stays vulnerable to being reclaimed by a *second* concurrent
+// worker tick while the first is still alive, wasting a duplicate Claude
+// call and racing both runs' final writes against each other. This alone
+// only reduces how often reclaim-while-alive happens; the extracted_fields
+// upsert below (not a plain insert) is what makes an actual reclaim-and-
+// reprocess — genuine crash recovery, or a rare race this heartbeat
+// doesn't close — safe rather than merely rare.
+const HEARTBEAT_INTERVAL_MS = 2 * 60_000;
+
+function startHeartbeat(documentId: string): ReturnType<typeof setInterval> {
+  return setInterval(() => {
+    supabase
+      .from("documents")
+      .update({ processing_started_at: new Date().toISOString() })
+      .eq("id", documentId)
+      .then(({ error }) => {
+        if (error) {
+          console.error(`[worker] heartbeat failed for ${documentId}: ${error.message}`);
+        }
+      });
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
 // Every processed document lands in 'needs_review', never an auto-approved
 // state — that's the actual point of this project, not a placeholder to
 // outgrow. The confidence threshold decides which *fields* get flagged for
@@ -20,6 +46,15 @@ const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"])
 //
 // Never logs document contents or field values, only metadata and counts.
 export async function processDocument(document: DocumentRow): Promise<void> {
+  const heartbeat = startHeartbeat(document.id);
+  try {
+    await processDocumentInner(document);
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+async function processDocumentInner(document: DocumentRow): Promise<void> {
   console.log(`[worker] processing ${document.id} (${document.original_filename})`);
 
   if (!document.template_id) {
@@ -88,7 +123,15 @@ export async function processDocument(document: DocumentRow): Promise<void> {
   const scored = scoreFields(extracted, validations);
   const flaggedCount = scored.filter((field) => needsAttention(field.finalConfidence)).length;
 
-  const { error: insertError } = await supabase.from("extracted_fields").insert(
+  // Upsert, not a plain insert: a reclaimed-and-reprocessed document (stale
+  // recovery, or a race the heartbeat above doesn't fully close) must
+  // overwrite its own prior attempt's rows rather than duplicate them.
+  // Requires the unique (document_id, field_key) index added in
+  // supabase/migrations/20260727010000_idempotent_field_writes.sql. Safe to
+  // overwrite unconditionally: reprocessing only ever happens while status
+  // is still 'queued'/'processing', never 'needs_review', so there's no
+  // window where a human correction could already exist on these rows.
+  const { error: insertError } = await supabase.from("extracted_fields").upsert(
     scored.map((field) => ({
       document_id: document.id,
       field_key: field.key,
@@ -99,6 +142,7 @@ export async function processDocument(document: DocumentRow): Promise<void> {
       validation_notes: field.validationNotes,
       final_confidence: field.finalConfidence,
     })),
+    { onConflict: "document_id,field_key" },
   );
 
   if (insertError) {
