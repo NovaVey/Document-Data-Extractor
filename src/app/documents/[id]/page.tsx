@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { statusLabel } from "@/lib/documents/status";
+import { resolveReviewConfidenceThreshold } from "@/lib/review/threshold";
 import type { TemplateField } from "@/lib/templates/types";
 import { ReviewPanel, type ExtractedFieldRow } from "./review-panel";
 import { DocumentStatusPoller } from "./status-poller";
@@ -138,6 +139,7 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
                 documentStatus={document.status}
                 templateFields={templateFields}
                 extractedFields={(extractedFields ?? []) as ExtractedFieldRow[]}
+                confidenceThreshold={resolveReviewConfidenceThreshold()}
               />
             )}
           </div>

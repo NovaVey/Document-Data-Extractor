@@ -39,15 +39,19 @@ npm start
 All three are required — the worker throws on startup without either of the
 first two (`src/supabase.ts`, `src/anthropic.ts`), and on the first
 extraction call without the third. `SUPABASE_ANON_KEY` is only needed by
-`scripts/seed-demo.mjs`, never by the deployed worker itself. `SENTRY_DSN`
-and `DAILY_COST_CAP_CENTS` are optional — Sentry no-ops if unset, and the
-cost cap defaults to 500 cents/day (`src/claim.ts`). See `.env.example` for
-the full list.
+`scripts/seed-demo.mjs`, never by the deployed worker itself. `SENTRY_DSN`,
+`DAILY_COST_CAP_CENTS`, and `REVIEW_CONFIDENCE_THRESHOLD` are optional —
+Sentry no-ops if unset, the cost cap defaults to 500 cents/day
+(`src/claim.ts`), and the review threshold defaults to 0.9
+(`src/scoring/threshold.ts`, mirrored in `approve_document()` — the
+database is what actually enforces it, this worker-side copy only feeds a
+log line). See `.env.example` for the full list.
 
 ## Deployment
 
 Deployed as its own Railway service, root directory `worker/`, build command
 `npm run build`, start command `npm start`. Needs the same environment
 variables as local dev (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
-`ANTHROPIC_API_KEY` required; `SENTRY_DSN` and `DAILY_COST_CAP_CENTS`
-optional), set in Railway rather than a `.env` file.
+`ANTHROPIC_API_KEY` required; `SENTRY_DSN`, `DAILY_COST_CAP_CENTS`, and
+`REVIEW_CONFIDENCE_THRESHOLD` optional), set in Railway rather than a
+`.env` file.
