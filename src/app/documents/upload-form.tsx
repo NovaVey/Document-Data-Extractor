@@ -265,7 +265,7 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
                       onClick={() => handleRemove(idx)}
                       aria-label={`Remove ${result.name} from this list`}
                       title="Remove from list"
-                      className="text-black/40 hover:text-black/70 dark:text-white/40 dark:hover:text-white/70"
+                      className="text-black/60 hover:text-black/70 dark:text-white/60 dark:hover:text-white/70"
                     >
                       ×
                     </button>
