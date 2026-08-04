@@ -233,7 +233,7 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
         className="sr-only"
       />
       {results.some((result) => !result.dismissed) && (
-        <ul className="flex flex-col gap-1 text-sm">
+        <ul aria-live="polite" aria-atomic="false" className="flex flex-col gap-1 text-sm">
           {results.map((result, idx) => {
             if (result.dismissed) return null;
             return (

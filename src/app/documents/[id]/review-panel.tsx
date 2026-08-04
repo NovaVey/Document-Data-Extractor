@@ -156,7 +156,9 @@ export function ReviewPanel({
               )}
 
               {fieldError[field.key] && (
-                <p className="text-xs text-red-600 dark:text-red-400">{fieldError[field.key]}</p>
+                <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                  {fieldError[field.key]}
+                </p>
               )}
 
               {showNormalized && (
@@ -196,16 +198,22 @@ export function ReviewPanel({
             Approve
           </button>
           {unresolvedCount > 0 && (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+            <p aria-live="polite" className="text-xs text-amber-700 dark:text-amber-400">
               {unresolvedCount} field(s) still need review before this document can be approved.
             </p>
           )}
-          {approveError && <p className="text-xs text-red-600 dark:text-red-400">{approveError}</p>}
+          {approveError && (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              {approveError}
+            </p>
+          )}
         </div>
       )}
 
       {documentStatus === "approved" && (
-        <p className="text-sm text-green-700 dark:text-green-400">Approved.</p>
+        <p aria-live="polite" className="text-sm text-green-700 dark:text-green-400">
+          Approved.
+        </p>
       )}
     </div>
   );
