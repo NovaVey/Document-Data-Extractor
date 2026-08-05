@@ -44,11 +44,7 @@ async function lane(id: number): Promise<void> {
 
 async function main(): Promise<void> {
   const concurrency = resolveWorkerConcurrency();
-  console.log(
-    `[worker] starting, ${concurrency} lane(s), polling every`,
-    POLL_INTERVAL_MS,
-    "ms",
-  );
+  console.log(`[worker] starting, ${concurrency} lane(s), polling every`, POLL_INTERVAL_MS, "ms");
 
   await Promise.all(Array.from({ length: concurrency }, (_, id) => lane(id)));
 
