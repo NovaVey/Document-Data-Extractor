@@ -10,13 +10,24 @@ queue, which is exactly what RLS exists to prevent for a normal client).
 
 ## What it does
 
-Repeatedly claims one queued document at a time (`claim_next_document()`,
-`FOR UPDATE SKIP LOCKED` under the hood — safe for multiple worker instances
-to run concurrently without double-processing a row), processes it, and
-updates its status. A claim that's been sitting in `processing` past a
-staleness window is treated as an abandoned/crashed attempt and reclaimed
-automatically — no row can get stuck forever because a worker process died
-mid-attempt.
+Repeatedly claims a queued document (`claim_next_document()`, `FOR UPDATE
+SKIP LOCKED` under the hood — safe for multiple concurrent claimers, whether
+that's multiple lanes in one process or multiple worker instances, to run
+without double-processing a row), processes it, and updates its status. A
+claim that's been sitting in `processing` past a staleness window is treated
+as an abandoned/crashed attempt and reclaimed automatically — no row can get
+stuck forever because a worker process died mid-attempt.
+
+By default a single process runs one claim-process-sleep loop ("lane") at a
+time — `WORKER_CONCURRENCY` (see `.env.example`, `src/concurrency.ts`) raises
+that to N concurrent lanes within the same process for more throughput. This
+is orthogonal to running multiple Railway instances of the service (also
+safe, for the same `FOR UPDATE SKIP LOCKED` reason): `WORKER_CONCURRENCY`
+scales one process's own throughput, running more instances scales
+horizontally — both compose. Raising either one widens the per-org daily
+cost cap's overshoot window proportionally (`src/index.ts` has the full
+reasoning) — keep `WORKER_CONCURRENCY` modest (2-5) unless real volume needs
+more.
 
 `src/process.ts` runs the full pipeline: downloads the file from storage,
 extracts fields via the Anthropic API (`src/extraction/`), validates and
@@ -40,12 +51,13 @@ All three are required — the worker throws on startup without either of the
 first two (`src/supabase.ts`, `src/anthropic.ts`), and on the first
 extraction call without the third. `SUPABASE_ANON_KEY` is only needed by
 `scripts/seed-demo.mjs`, never by the deployed worker itself. `SENTRY_DSN`,
-`DAILY_COST_CAP_CENTS`, and `REVIEW_CONFIDENCE_THRESHOLD` are optional —
-Sentry no-ops if unset, the cost cap defaults to 500 cents/day
-(`src/claim.ts`), and the review threshold defaults to 0.9
-(`src/scoring/threshold.ts`, mirrored in `approve_document()` — the
+`DAILY_COST_CAP_CENTS`, `REVIEW_CONFIDENCE_THRESHOLD`, and
+`WORKER_CONCURRENCY` are optional — Sentry no-ops if unset, the cost cap
+defaults to 500 cents/day (`src/claim.ts`), the review threshold defaults to
+0.9 (`src/scoring/threshold.ts`, mirrored in `approve_document()` — the
 database is what actually enforces it, this worker-side copy only feeds a
-log line). See `.env.example` for the full list.
+log line), and concurrency defaults to 1 lane (`src/concurrency.ts` —
+unchanged one-at-a-time behavior). See `.env.example` for the full list.
 
 ## Deployment
 
