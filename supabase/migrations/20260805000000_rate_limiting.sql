@@ -11,7 +11,11 @@
 -- both counts this caller's recent hits for one action and records this
 -- one, inside a single function invocation, so two near-simultaneous
 -- calls can't both slip through a limit that should have blocked the
--- second one.
+-- second one — see the advisory lock below for what actually makes that
+-- true (an initial version of this function only had the count-then-
+-- insert shape without it, which is a check-then-act race: two
+-- concurrent calls under READ COMMITTED can each read the same
+-- under-limit count before either commits its insert).
 create table rate_limit_hits (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -46,6 +50,16 @@ revoke all on rate_limit_hits from anon, authenticated;
 -- keep this table from growing forever. Safe against every window this
 -- app actually uses (all under an hour; see the call sites) — a window
 -- longer than the cleanup threshold would undercount its own hits.
+--
+-- p_action is restricted to the app's own known action names, not a free
+-- -form string: this function is GRANTed to the entire `authenticated`
+-- role (any signed-in user can call it directly via supabase.rpc(), not
+-- just through this app's own Server Actions), and the opportunistic
+-- cleanup above only ever revisits a (user_id, action) pair it has seen
+-- before. A caller looping this call with a fresh, never-before-seen
+-- p_action on every invocation would otherwise insert one permanent,
+-- never-cleaned-up row per call — an unbounded-growth vector. Keep this
+-- list in sync with RATE_LIMIT_ACTIONS in src/lib/rate-limit/check.ts.
 create or replace function public.check_rate_limit(
   p_action text,
   p_max_hits integer,
@@ -63,6 +77,32 @@ begin
   if current_user_id is null then
     return false;
   end if;
+
+  if p_action not in (
+    'template_write',
+    'document_write',
+    'field_correction',
+    'document_approval',
+    'document_export'
+  ) then
+    raise exception 'check_rate_limit: unrecognized action %', p_action;
+  end if;
+
+  -- Serializes concurrent calls for the same (user, action) pair so the
+  -- count-then-insert below can't race: two simultaneous calls would
+  -- otherwise both evaluate the SELECT below against the same snapshot
+  -- before either commits its INSERT (plain SELECT takes no lock, and
+  -- Postgres's default READ COMMITTED isolation doesn't serialize this on
+  -- its own) — both would then see an under-limit count and both let
+  -- their request through, silently doubling (or worse, with more
+  -- concurrent callers) the configured limit. The two-key overload keys
+  -- the lock on the pair directly rather than concatenating them into one
+  -- string; a hash collision with an unrelated (user, action) pair would
+  -- only ever cause extra, harmless serialization between unrelated
+  -- callers, never an incorrect result. Transaction-scoped (_xact_):
+  -- released automatically at the end of this call, no explicit unlock
+  -- needed and no risk of leaking a held lock past this function.
+  perform pg_advisory_xact_lock(hashtext(current_user_id::text), hashtext(p_action));
 
   delete from rate_limit_hits
   where user_id = current_user_id

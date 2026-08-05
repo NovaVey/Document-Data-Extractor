@@ -178,7 +178,7 @@ describe("UploadForm — duplicate detection", () => {
     expect(state.createDocumentRecordMock).not.toHaveBeenCalled();
   });
 
-  it("Replace deletes the existing document, then uploads the new file", async () => {
+  it("Replace deletes the existing document, then uploads the new file, in that order", async () => {
     state.findDuplicateDocumentMock.mockResolvedValue({
       id: "doc-existing",
       originalFilename: "old.pdf",
@@ -195,11 +195,44 @@ describe("UploadForm — duplicate detection", () => {
     await screen.findByText(/^success$/i);
     expect(state.createDocumentRecordMock).toHaveBeenCalledTimes(1);
     expect(state.routerRefresh).toHaveBeenCalled();
+
+    // Order matters, not just that both happened: Replace only works
+    // because deleting the existing row first frees up the (org_id,
+    // file_hash) unique index for the new insert — uploading first would
+    // hit that constraint on every real Replace click. mock.invocationCallOrder
+    // is a global counter shared across all mocks, so comparing the two
+    // directly proves delete really ran before create, not just that both
+    // were eventually called.
+    const deleteOrder = state.deleteDocumentForReplaceMock.mock.invocationCallOrder[0];
+    const createOrder = state.createDocumentRecordMock.mock.invocationCallOrder[0];
+    expect(deleteOrder).toBeLessThan(createOrder);
+  });
+
+  it("shows an error and does not upload when deleting the existing document fails", async () => {
+    state.findDuplicateDocumentMock.mockResolvedValue({
+      id: "doc-existing",
+      originalFilename: "old.pdf",
+      status: "needs_review",
+      uploadedAt: "2026-08-01T00:00:00.000Z",
+    });
+    state.deleteDocumentForReplaceMock.mockResolvedValue({
+      error: "Couldn't remove the existing document record. Please try again.",
+    });
+    render(<UploadForm orgId="org-1" templates={TEMPLATES} />);
+    await userEvent.upload(screen.getByLabelText(/choose files/i), makeFile("new.pdf", "content"));
+    await userEvent.click(await screen.findByRole("button", { name: /replace existing/i }));
+
+    // handleReplace's catch block (upload-form.tsx) is what's under test
+    // here: a failed delete must render as a real error, not leave the row
+    // stuck on "Replacing…" with no feedback.
+    await screen.findByText(/couldn't remove the existing document record\. please try again\./i);
+    expect(state.createDocumentRecordMock).not.toHaveBeenCalled();
+    expect(state.uploadMock).not.toHaveBeenCalled();
   });
 });
 
 describe("UploadForm — success and error paths", () => {
-  it("uploads a single valid file successfully and refreshes the router", async () => {
+  it("uploads a single valid file successfully, with the correct storage path and metadata, and refreshes the router", async () => {
     render(<UploadForm orgId="org-1" templates={TEMPLATES} />);
     await userEvent.upload(
       screen.getByLabelText(/choose files/i),
@@ -208,10 +241,43 @@ describe("UploadForm — success and error paths", () => {
 
     await screen.findByText(/^success$/i);
     expect(state.uploadMock).toHaveBeenCalledTimes(1);
+
+    // storage.foldername(name)[1] is exactly what the storage.objects RLS
+    // policies key off (supabase/migrations/20260725020000_upload_storage.sql)
+    // — asserting the real, complete path (not just that upload() was
+    // called with *something*) is what would actually catch a bug that
+    // drops/mangles the org-id prefix or the filename sanitization.
+    // crypto.randomUUID() is stubbed to a fixed value in beforeEach, so
+    // this is an exact match, not a pattern.
+    expect(state.uploadMock).toHaveBeenCalledWith(
+      "org-1/test-uuid-0000-invoice.pdf",
+      expect.anything(),
+      expect.objectContaining({ contentType: "application/pdf" }),
+    );
     expect(state.createDocumentRecordMock).toHaveBeenCalledWith(
-      expect.objectContaining({ originalFilename: "invoice.pdf", templateId: "tmpl-1" }),
+      expect.objectContaining({
+        originalFilename: "invoice.pdf",
+        storagePath: "org-1/test-uuid-0000-invoice.pdf",
+        templateId: "tmpl-1",
+        mimeType: "application/pdf",
+      }),
     );
     await waitFor(() => expect(state.routerRefresh).toHaveBeenCalled());
+  });
+
+  it("sanitizes an unsafe filename in the storage path", async () => {
+    render(<UploadForm orgId="org-1" templates={TEMPLATES} />);
+    await userEvent.upload(
+      screen.getByLabelText(/choose files/i),
+      makeFile("weird file (1)!.pdf", "content"),
+    );
+
+    await screen.findByText(/^success$/i);
+    expect(state.uploadMock).toHaveBeenCalledWith(
+      "org-1/test-uuid-0000-weird_file__1__.pdf",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("uploads multiple valid files sequentially, all ending in success", async () => {
@@ -226,7 +292,12 @@ describe("UploadForm — success and error paths", () => {
     expect(await screen.findAllByText(/^success$/i)).toHaveLength(3);
   });
 
-  it("shows a friendly error when the storage upload itself fails", async () => {
+  it("shows the storage error's own real message when the upload itself fails", async () => {
+    // Not routed through friendlyDbError (see upload-form.tsx's own
+    // comment) — a Storage error's real message is shown as-is, since it
+    // never carries a Postgres-style code for that helper to key off, and
+    // discarding it in favor of a generic fallback would lose real,
+    // actionable detail (session expired, quota hit, etc.).
     state.uploadMock.mockResolvedValue({ error: { message: "network down" } });
     render(<UploadForm orgId="org-1" templates={TEMPLATES} />);
     await userEvent.upload(
@@ -234,7 +305,7 @@ describe("UploadForm — success and error paths", () => {
       makeFile("invoice.pdf", "content"),
     );
 
-    await screen.findByText(/couldn't upload the file\. please try again\./i);
+    await screen.findByText(/^network down$/i);
     expect(state.createDocumentRecordMock).not.toHaveBeenCalled();
   });
 

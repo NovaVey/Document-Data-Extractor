@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { friendlyDbError } from "@/lib/errors/friendly";
 import {
   createDocumentRecord,
   deleteDocumentForReplace,
@@ -52,11 +51,15 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(storagePath, entry.file, { contentType: entry.file.type });
-      if (uploadError) {
-        throw new Error(
-          friendlyDbError(uploadError, "Couldn't upload the file. Please try again."),
-        );
-      }
+      // Not routed through friendlyDbError: that helper maps Postgres/
+      // PostgREST error *codes* (23505, 42501, ...), which a Supabase
+      // Storage error never carries (it only has message/status/
+      // statusCode) — every Storage failure would otherwise always fall
+      // through to the same generic fallback text, discarding the real,
+      // often actionable reason (session expired, quota hit, file too
+      // large) with nothing else surfacing it. Storage error messages
+      // were never the "raw Postgres error string" this cleanup targeted.
+      if (uploadError) throw new Error(uploadError.message);
 
       const result = await createDocumentRecord({
         originalFilename: entry.file.name,

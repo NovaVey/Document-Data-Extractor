@@ -94,9 +94,11 @@ export async function deleteDocumentForReplace(
     .remove([document.storage_path]);
 
   if (storageError) {
-    return {
-      error: friendlyDbError(storageError, "Couldn't remove the existing file. Please try again."),
-    };
+    // Not routed through friendlyDbError: that helper maps Postgres/
+    // PostgREST error codes, which a Supabase Storage error never
+    // carries — see upload-form.tsx's uploadEntry() for the same
+    // reasoning (this call site was flagged as the same issue).
+    return { error: storageError.message };
   }
 
   const { error: deleteError } = await supabase.from("documents").delete().eq("id", documentId);

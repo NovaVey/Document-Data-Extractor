@@ -1,0 +1,15 @@
+-- Discovered verifying grants live after the rate-limiting migration:
+-- `revoke all on function ... from public` does not revoke a grant this
+-- Supabase project's schema-level default privileges already applied
+-- directly to a *specific* role (anon, authenticated, service_role) at
+-- CREATE FUNCTION time — the exact same gotcha claim_next_document()'s
+-- own history already hit once (see 20260725040100_fix_claim_function_grants.sql).
+-- check_rate_limit()'s stated intent ("grant execute ... to authenticated"
+-- only) didn't actually take effect for `anon`, which could still call it
+-- directly (confirmed live: has_function_privilege('anon', ...) was true).
+-- Harmless in practice today — the function returns false immediately for
+-- a null auth.uid(), which is what every anon-role call has — but not
+-- what was intended or documented, so it's fixed explicitly rather than
+-- left as an unverified assumption. Same "verify grants actually changed"
+-- discipline used elsewhere in this schema (e.g. 20260804000000_template_org_scoping.sql).
+revoke execute on function public.check_rate_limit(text, integer, interval) from anon;
