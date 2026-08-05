@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { statusLabel } from "@/lib/documents/status";
 import { resolveReviewConfidenceThreshold } from "@/lib/review/threshold";
+import { friendlyDbError } from "@/lib/errors/friendly";
 import type { TemplateField } from "@/lib/templates/types";
 import { ReviewPanel, type ExtractedFieldRow } from "./review-panel";
 import { DocumentStatusPoller } from "./status-poller";
@@ -123,7 +124,8 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
 
             {isProcessed && templateError && (
               <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                Could not load this document&apos;s template: {templateError.message}
+                Could not load this document&apos;s template:{" "}
+                {friendlyDbError(templateError, "please refresh the page.")}
               </p>
             )}
 

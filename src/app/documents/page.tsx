@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgId } from "@/lib/org";
 import { statusLabel } from "@/lib/documents/status";
 import { DAILY_COST_CAP_CENTS } from "@/lib/documents/cost-cap";
+import { friendlyDbError } from "@/lib/errors/friendly";
 import { signOut } from "./actions";
 import { UploadForm } from "./upload-form";
 import { FilterForm } from "./filter-form";
@@ -129,7 +130,8 @@ export default async function DocumentsPage({
 
       {costError ? (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-          Could not load today&apos;s extraction cost: {costError.message}
+          Could not load today&apos;s extraction cost:{" "}
+          {friendlyDbError(costError, "please refresh the page.")}
         </p>
       ) : (
         <p className="text-xs text-black/60 dark:text-white/60">
@@ -145,7 +147,7 @@ export default async function DocumentsPage({
 
       {templatesError && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Could not load templates: {templatesError.message}
+          Could not load templates: {friendlyDbError(templatesError, "please refresh the page.")}
         </p>
       )}
 
@@ -184,7 +186,11 @@ export default async function DocumentsPage({
         <span className="text-xs text-black/60 dark:text-white/60">(approved documents only)</span>
       </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error.message}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          {friendlyDbError(error, "Could not load documents. Please refresh the page.")}
+        </p>
+      )}
 
       {isPageOverflow && (
         <p className="text-sm text-black/60 dark:text-white/60">

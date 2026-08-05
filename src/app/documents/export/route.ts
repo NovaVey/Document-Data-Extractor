@@ -9,6 +9,15 @@ import {
   type ExportTemplate,
 } from "@/lib/export/table";
 import { toCsv } from "@/lib/export/csv";
+import { friendlyDbError } from "@/lib/errors/friendly";
+import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit/check";
+
+// An export is the most expensive single request this app serves (up to
+// EXPORT_ROW_LIMIT rows, every one of their extracted_fields, an in-memory
+// table build, and for XLSX a real spreadsheet buffer) — a tighter budget
+// than the write actions below is deliberate.
+const EXPORT_MAX_HITS = 20;
+const EXPORT_WINDOW = "5 minutes";
 
 // Unbounded before this: every approved document matching the filters
 // (plus every one of its extracted_fields rows) was pulled into memory in
@@ -36,6 +45,11 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
 
+  const allowed = await checkRateLimit(supabase, "document_export", EXPORT_MAX_HITS, EXPORT_WINDOW);
+  if (!allowed) {
+    return new Response(RATE_LIMIT_MESSAGE, { status: 429 });
+  }
+
   // { count: "exact" } + .limit() together: PostgREST computes the exact
   // total match count independently of the limit, so this tells us both
   // "how many rows would this export include" and "here they are, capped"
@@ -54,7 +68,13 @@ export async function GET(request: Request) {
   const { data: documents, count: totalCount, error: documentsError } = await documentsQuery;
 
   if (documentsError) {
-    return new Response(documentsError.message, { status: 500 });
+    return new Response(
+      friendlyDbError(
+        documentsError,
+        "Couldn't load documents for export. Please try again shortly.",
+      ),
+      { status: 500 },
+    );
   }
   if (!documents || documents.length === 0) {
     return new Response("No approved documents match these filters.", { status: 404 });
@@ -81,7 +101,13 @@ export async function GET(request: Request) {
   ]);
 
   if (fieldsError) {
-    return new Response(fieldsError.message, { status: 500 });
+    return new Response(
+      friendlyDbError(
+        fieldsError,
+        "Couldn't load field data for export. Please try again shortly.",
+      ),
+      { status: 500 },
+    );
   }
 
   const templatesById = new Map<string, ExportTemplate>(

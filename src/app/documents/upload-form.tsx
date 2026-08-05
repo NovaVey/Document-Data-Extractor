@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyDbError } from "@/lib/errors/friendly";
 import {
   createDocumentRecord,
   deleteDocumentForReplace,
@@ -51,7 +52,11 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(storagePath, entry.file, { contentType: entry.file.type });
-      if (uploadError) throw new Error(uploadError.message);
+      if (uploadError) {
+        throw new Error(
+          friendlyDbError(uploadError, "Couldn't upload the file. Please try again."),
+        );
+      }
 
       const result = await createDocumentRecord({
         originalFilename: entry.file.name,

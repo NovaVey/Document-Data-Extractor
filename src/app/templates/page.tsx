@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentMembership } from "@/lib/org";
+import { friendlyDbError } from "@/lib/errors/friendly";
 import { DeleteTemplateButton } from "./delete-template-button";
 import type { TemplateField } from "@/lib/templates/types";
 
@@ -11,6 +13,15 @@ export default async function TemplatesPage() {
     .select("id, name, fields, created_at")
     .order("created_at", { ascending: false });
 
+  // Templates are shared org-wide configuration — role enforcement
+  // (Medium PR F backlog item, supabase/migrations/20260805010000_role_enforcement.sql)
+  // restricts creating/editing/deleting them to owners. isOwner also gates
+  // the New/Edit/Delete affordances below so a member never lands on a
+  // form that's only going to reject their submission — the real
+  // enforcement is still server-side (this is just the entry points).
+  const membership = await getCurrentMembership();
+  const isOwner = membership?.role === "owner";
+
   return (
     <main className="flex flex-1 flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
@@ -19,16 +30,28 @@ export default async function TemplatesPage() {
           <Link href="/documents" className="text-sm underline underline-offset-2">
             Documents
           </Link>
-          <Link
-            href="/templates/new"
-            className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background"
-          >
-            New template
-          </Link>
+          {isOwner && (
+            <Link
+              href="/templates/new"
+              className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background"
+            >
+              New template
+            </Link>
+          )}
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error.message}</p>}
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          {friendlyDbError(error, "Could not load templates. Please refresh the page.")}
+        </p>
+      )}
+
+      {!isOwner && (
+        <p className="text-sm text-black/60 dark:text-white/60">
+          Only an organization owner can create, edit, or delete templates.
+        </p>
+      )}
 
       {!error && templates?.length === 0 && (
         <p className="text-sm text-black/60 dark:text-white/60">
@@ -52,15 +75,17 @@ export default async function TemplatesPage() {
                     {fields.map((f) => f.key).join(", ")}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Link
-                    href={`/templates/${template.id}/edit`}
-                    className="text-sm underline underline-offset-2"
-                  >
-                    Edit
-                  </Link>
-                  <DeleteTemplateButton templateId={template.id} />
-                </div>
+                {isOwner && (
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/templates/${template.id}/edit`}
+                      className="text-sm underline underline-offset-2"
+                    >
+                      Edit
+                    </Link>
+                    <DeleteTemplateButton templateId={template.id} />
+                  </div>
+                )}
               </li>
             );
           })}
