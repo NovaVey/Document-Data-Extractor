@@ -4,9 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { statusLabel } from "@/lib/documents/status";
 import { resolveReviewConfidenceThreshold } from "@/lib/review/threshold";
 import { friendlyDbError } from "@/lib/errors/friendly";
+import { getCachedSignedPreviewUrl } from "@/lib/documents/signed-preview-url";
 import type { TemplateField } from "@/lib/templates/types";
 import { ReviewPanel, type ExtractedFieldRow } from "./review-panel";
 import { DocumentStatusPoller } from "./status-poller";
+import { FailedDocumentActions } from "./failed-document-actions";
+import { ActivityLog } from "./activity-log";
 
 const SIGNED_URL_TTL_SECONDS = 600;
 const UNPROCESSED_STATUSES = new Set(["uploaded", "queued", "processing"]);
@@ -29,28 +32,23 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
     notFound();
   }
 
-  const [
-    { data: template, error: templateError },
-    { data: extractedFields },
-    { data: signedUrlData },
-  ] = await Promise.all([
-    document.template_id
-      ? supabase
-          .from("extraction_templates")
-          .select("fields")
-          .eq("id", document.template_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    supabase
-      .from("extracted_fields")
-      .select(
-        "field_key, raw_value, normalized_value, model_confidence, final_confidence, validation_status, validation_notes, was_corrected, corrected_value",
-      )
-      .eq("document_id", document.id),
-    supabase.storage
-      .from("documents")
-      .createSignedUrl(document.storage_path, SIGNED_URL_TTL_SECONDS),
-  ]);
+  const [{ data: template, error: templateError }, { data: extractedFields }, signedUrl] =
+    await Promise.all([
+      document.template_id
+        ? supabase
+            .from("extraction_templates")
+            .select("fields")
+            .eq("id", document.template_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      supabase
+        .from("extracted_fields")
+        .select(
+          "field_key, raw_value, normalized_value, model_confidence, final_confidence, validation_status, validation_notes, was_corrected, corrected_value",
+        )
+        .eq("document_id", document.id),
+      getCachedSignedPreviewUrl(document.storage_path, SIGNED_URL_TTL_SECONDS),
+    ]);
 
   const templateFields = (template?.fields as TemplateField[] | undefined) ?? [];
   const isProcessed = document.status === "needs_review" || document.status === "approved";
@@ -67,7 +65,7 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
       <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium text-black/60 dark:text-white/60">Document</h2>
-          {signedUrlData?.signedUrl ? (
+          {signedUrl ? (
             document.mime_type === "application/pdf" ? (
               // The two columns only sit side by side from lg: up (grid-
               // cols-1 below that) -- at a phone width this preview is
@@ -78,14 +76,14 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
               // viewports, growing to the original 70vh once lg: gives it
               // a column of its own again.
               <iframe
-                src={signedUrlData.signedUrl}
+                src={signedUrl}
                 title={document.original_filename}
                 className="h-[40vh] w-full rounded border border-black/10 sm:h-[55vh] lg:h-[70vh] dark:border-white/15"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- signed Storage URL, not a static asset Next can optimize
               <img
-                src={signedUrlData.signedUrl}
+                src={signedUrl}
                 alt={document.original_filename}
                 className="max-h-[40vh] w-full rounded border border-black/10 object-contain sm:max-h-[55vh] lg:max-h-[70vh] dark:border-white/15"
               />
@@ -111,9 +109,12 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
               off of. */}
           <div aria-live="polite">
             {document.status === "failed" && (
-              <p className="text-sm text-red-600 dark:text-red-400">
-                {document.error_message ?? "Processing failed."}
-              </p>
+              <>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {document.error_message ?? "Processing failed."}
+                </p>
+                <FailedDocumentActions documentId={document.id} />
+              </>
             )}
 
             {UNPROCESSED_STATUSES.has(document.status) && (
@@ -147,6 +148,8 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
           </div>
         </div>
       </div>
+
+      <ActivityLog documentId={document.id} />
     </main>
   );
 }

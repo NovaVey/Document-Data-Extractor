@@ -98,12 +98,22 @@ export function TemplateForm({
                 invoice_number)" down to a few visible characters -- full-
                 width and stacked reads properly on a phone; side-by-side
                 from sm: up matches the original desktop layout exactly. */}
+            {/* Medium-priority audit finding: every input below relied
+                solely on its placeholder for an accessible name — a real
+                label, not just visible-until-typed placeholder text, that
+                screen-reader software (and Chrome/Firefox's own
+                autofill/accessibility tree) can always announce. aria-label
+                mirrors the same text the placeholder already shows rather
+                than introducing an id/htmlFor pair per field per row to
+                keep in sync with `index`, same reasoning as review-panel.tsx's
+                correction input. */}
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 required
                 value={field.key}
                 onChange={(event) => updateField(index, { key: event.target.value })}
                 placeholder="key (e.g. invoice_number)"
+                aria-label="Field key"
                 className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
               <input
@@ -111,6 +121,7 @@ export function TemplateForm({
                 value={field.label}
                 onChange={(event) => updateField(index, { label: event.target.value })}
                 placeholder="Label (e.g. Invoice Number)"
+                aria-label="Field label"
                 className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
             </div>
@@ -118,6 +129,7 @@ export function TemplateForm({
               <select
                 value={field.type}
                 onChange={(event) => updateField(index, { type: event.target.value as FieldType })}
+                aria-label="Field type"
                 className="rounded border border-black/15 bg-white px-2 py-1 text-sm text-black dark:border-white/20"
               >
                 {FIELD_TYPES.map((type) => (
@@ -147,12 +159,14 @@ export function TemplateForm({
                 value={field.formatHint ?? ""}
                 onChange={(event) => updateField(index, { formatHint: event.target.value })}
                 placeholder="Format hint (optional, e.g. MM/DD/YYYY)"
+                aria-label="Format hint (optional)"
                 className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
               <input
                 value={field.validation ?? ""}
                 onChange={(event) => updateField(index, { validation: event.target.value })}
                 placeholder="Validation note (optional)"
+                aria-label="Validation note (optional)"
                 className="rounded border border-black/15 px-2 py-1 text-sm sm:w-1/2 dark:border-white/20"
               />
             </div>

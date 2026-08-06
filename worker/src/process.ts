@@ -40,9 +40,10 @@ function startHeartbeat(documentId: string): ReturnType<typeof setInterval> {
 // Every processed document lands in 'needs_review', never an auto-approved
 // state — that's the actual point of this project, not a placeholder to
 // outgrow. The confidence threshold decides which *fields* get flagged for
-// a reviewer's attention (used below only for a summary count — there's no
-// review UI yet to route a per-field flag into, that's item 10), not
-// whether a document skips a human being involved at all.
+// a reviewer's attention (used below only for a summary count — the actual
+// per-field routing lives client-side in review-panel.tsx, which reads
+// final_confidence directly off each extracted_fields row), not whether a
+// document skips a human being involved at all.
 //
 // Never logs document contents or field values, only metadata and counts.
 export async function processDocument(document: DocumentRow): Promise<void> {
@@ -107,6 +108,14 @@ async function processDocumentInner(document: DocumentRow): Promise<void> {
 
   const { error: runError } = await supabase.from("extraction_runs").insert({
     document_id: document.id,
+    // Denormalized (supabase/migrations/20260806030000_index_cost_cap_lookup.sql)
+    // so claim_next_document()'s per-org daily cost-cap check can filter
+    // on an indexed column instead of joining through documents on every
+    // candidate row it examines. Safe to denormalize here specifically
+    // because extraction_runs rows are insert-only — nothing ever updates
+    // one after creation — so this can never drift out of sync the way a
+    // mutable denormalized column could.
+    org_id: document.org_id,
     attempt: (priorAttempts ?? 0) + 1,
     model: MODEL,
     input_tokens: inputTokens,

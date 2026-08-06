@@ -64,6 +64,6 @@ unchanged one-at-a-time behavior). See `.env.example` for the full list.
 Deployed as its own Railway service, root directory `worker/`, build command
 `npm run build`, start command `npm start`. Needs the same environment
 variables as local dev (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
-`ANTHROPIC_API_KEY` required; `SENTRY_DSN`, `DAILY_COST_CAP_CENTS`, and
-`REVIEW_CONFIDENCE_THRESHOLD` optional), set in Railway rather than a
-`.env` file.
+`ANTHROPIC_API_KEY` required; `SENTRY_DSN`, `DAILY_COST_CAP_CENTS`,
+`REVIEW_CONFIDENCE_THRESHOLD`, and `WORKER_CONCURRENCY` optional), set in
+Railway rather than a `.env` file.

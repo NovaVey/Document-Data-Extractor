@@ -186,9 +186,10 @@ export async function createDocumentRecord(
   }
 
   // Enqueue: 'uploaded' -> 'queued'. A distinct step (not part of the
-  // insert's default) so a future cost-cap check (item 17) has a natural
-  // place to block enqueueing without touching the upload path itself.
-  // Only the `status` column is grantable here (see migration
+  // insert's default) so the per-org daily cost cap (enforced in
+  // claim_next_document(), worker/src/claim.ts — a queued document just
+  // waits if the cap's already hit) has nothing to do with the upload path
+  // itself. Only the `status` column is grantable here (see migration
   // 20260725040200_enqueue_policy.sql) — this can never touch anything
   // else on the row, even if called with a crafted request.
   const { error: enqueueError } = await supabase

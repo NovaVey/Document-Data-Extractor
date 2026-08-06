@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
+import { OwnerOnlyPage } from "@/components/owner-only-page";
 import type { TemplateField } from "@/lib/templates/types";
 import { EditForm } from "./edit-form";
 
@@ -41,14 +42,7 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
   // of a form that will only fail on submit.
   const membership = await getCurrentMembership();
   if (membership?.role !== "owner") {
-    return (
-      <main className="flex flex-1 flex-col gap-6 p-8">
-        <h1 className="text-xl font-semibold">Edit template</h1>
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Only an organization owner can edit templates.
-        </p>
-      </main>
-    );
+    return <OwnerOnlyPage title="Edit template" action="edit templates" />;
   }
 
   return (

@@ -12,10 +12,19 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 // for a normal client.
 //
 // MUST NEVER be imported from a "use client" file, and every Server
-// Action/Route Handler that uses it must check the caller is an org
-// owner itself first (see src/app/settings/members/actions.ts) — unlike
-// every RLS-scoped client elsewhere in this app, nothing stops this
-// client from acting as any org.
+// Action/Route Handler/cached function that uses it must independently
+// establish the caller is actually authorized for whatever it's about to
+// do — unlike every RLS-scoped client elsewhere in this app, nothing
+// stops this client from acting as any org. For an owner-only operation
+// (see src/app/settings/members/actions.ts) that means checking the
+// caller's role is 'owner' first. It's not always an owner check
+// specifically, though — src/lib/documents/signed-preview-url.ts uses
+// this client too, for a document review page every org member (not just
+// owners) can reach; there, the equivalent check is that the caller's own
+// RLS-scoped `documents` read already confirmed they can see this exact
+// row before this client is ever invoked for it. The invariant is
+// "authorization was genuinely established first," not literally
+// "only from an owner-gated code path."
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

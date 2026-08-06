@@ -17,6 +17,16 @@ import { createClient } from "@/lib/supabase/client";
 // Component the way every other page in this app is.
 type Status = "checking" | "ready" | "invalid";
 
+// Medium-priority audit finding: if session establishment genuinely never
+// resolves (a malformed/tampered link, a Supabase-side hiccup), "checking"
+// had no way out — the page would say "Verifying your invite link…"
+// forever with no error and no way forward. This is generous relative to
+// the SDK's own URL-detection (normally resolves within one tick, see the
+// onAuthStateChange comment below) while still bounding the wait to
+// something a real person won't sit through wondering if the page is
+// broken.
+const VERIFICATION_TIMEOUT_MS = 10_000;
+
 export default function AcceptInvitePage() {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("checking");
@@ -30,7 +40,7 @@ export default function AcceptInvitePage() {
     let cancelled = false;
 
     supabase.auth.getUser().then(({ data }) => {
-      if (!cancelled) setStatus(data.user ? "ready" : "invalid");
+      if (!cancelled && data.user) setStatus("ready");
     });
 
     // Covers a session that gets established slightly after the initial
@@ -43,8 +53,16 @@ export default function AcceptInvitePage() {
       if (!cancelled && session?.user) setStatus("ready");
     });
 
+    // Neither check above ever explicitly sets "invalid" — a genuinely
+    // broken link just never produces a session, so without this timeout
+    // "checking" was the terminal state for that case, not a transient one.
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setStatus((current) => (current === "checking" ? "invalid" : current));
+    }, VERIFICATION_TIMEOUT_MS);
+
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -81,15 +99,24 @@ export default function AcceptInvitePage() {
       <div className="w-full max-w-sm">
         <h1 className="mb-6 text-xl font-semibold">Accept your invitation</h1>
 
-        {status === "checking" && (
-          <p className="text-sm text-black/60 dark:text-white/60">Verifying your invite link…</p>
-        )}
+        {/* aria-live so the checking -> ready/invalid transition gets
+            announced -- unlike every other async status change in this
+            app (document review's status poller, the review panel's
+            approve gate), this one previously had none: a screen-reader
+            user landed on "Verifying your invite link…" and had no signal
+            when it resolved either way, since nothing else on the page
+            changes focus or otherwise draws attention to it. */}
+        <div aria-live="polite">
+          {status === "checking" && (
+            <p className="text-sm text-black/60 dark:text-white/60">Verifying your invite link…</p>
+          )}
 
-        {status === "invalid" && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            This invite link is invalid or has expired. Ask whoever invited you to send a new one.
-          </p>
-        )}
+          {status === "invalid" && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              This invite link is invalid or has expired. Ask whoever invited you to send a new one.
+            </p>
+          )}
+        </div>
 
         {status === "ready" && (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">

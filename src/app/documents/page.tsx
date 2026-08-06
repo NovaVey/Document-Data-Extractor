@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
 import { statusLabel } from "@/lib/documents/status";
-import { DAILY_COST_CAP_CENTS } from "@/lib/documents/cost-cap";
+import { resolveDailyCostCapCents } from "@/lib/documents/cost-cap";
 import { friendlyDbError } from "@/lib/errors/friendly";
 import { signOut } from "./actions";
 import { UploadForm } from "./upload-form";
@@ -86,6 +86,29 @@ export default async function DocumentsPage({
     .select("cost_cents")
     .gte("created_at", todayStart.toISOString());
   const todaysCostCents = (costRows ?? []).reduce((sum, row) => sum + (row.cost_cents ?? 0), 0);
+  const dailyCostCapCents = resolveDailyCostCapCents();
+
+  // Medium-priority audit finding: nothing distinguished "no uploads
+  // today" from "the worker has been silently down for six hours" — see
+  // worker/src/index.ts's recordHeartbeat() for what writes this row.
+  // WORKER_STALE_AFTER_MS is generous relative to POLL_INTERVAL_MS (5s):
+  // wide enough to absorb a normal Railway redeploy/restart without a
+  // false alarm, tight enough to still catch a real outage well before a
+  // reviewer would otherwise notice documents silently piling up in
+  // `queued`.
+  const WORKER_STALE_AFTER_MS = 2 * 60 * 1000;
+  const { data: heartbeatRow } = await supabase
+    .from("worker_heartbeat")
+    .select("last_tick_at")
+    .eq("id", true)
+    .maybeSingle();
+  // new Date().getTime() rather than Date.now() -- the lint rule guarding
+  // render purity (react-hooks/purity) flags Date.now() specifically as
+  // an impure call, same reasoning todayStart above already works around
+  // by going through `new Date()`.
+  const workerStale =
+    !heartbeatRow ||
+    new Date().getTime() - new Date(heartbeatRow.last_tick_at).getTime() > WORKER_STALE_AFTER_MS;
 
   const exportParams = new URLSearchParams();
   if (template) exportParams.set("template", template);
@@ -142,12 +165,23 @@ export default async function DocumentsPage({
       ) : (
         <p className="text-xs text-black/60 dark:text-white/60">
           Today&apos;s extraction cost: ${(todaysCostCents / 100).toFixed(2)} of $
-          {(DAILY_COST_CAP_CENTS / 100).toFixed(2)}
-          {todaysCostCents >= DAILY_COST_CAP_CENTS && (
+          {(dailyCostCapCents / 100).toFixed(2)}
+          {todaysCostCents >= dailyCostCapCents && (
             <span className="ml-2 font-medium text-amber-700 dark:text-amber-400">
               Daily cap reached — new documents will wait until it resets.
             </span>
           )}
+        </p>
+      )}
+
+      {/* Only shown when actually stale -- a healthy worker adds no
+          permanent clutter to a page reviewers load constantly, same
+          reasoning as every other conditional warning on this page. */}
+      {workerStale && (
+        <p role="alert" className="text-xs font-medium text-amber-700 dark:text-amber-400">
+          {heartbeatRow
+            ? `The extraction worker hasn't reported in since ${new Date(heartbeatRow.last_tick_at).toLocaleString()} — new uploads may sit in the queue longer than usual.`
+            : "The extraction worker has never reported in — new uploads may sit in the queue indefinitely."}
         </p>
       )}
 
@@ -219,10 +253,18 @@ export default async function DocumentsPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-black/10 text-left text-xs text-black/60 dark:border-white/15 dark:text-white/60">
-                <th className="py-2 pr-4 font-medium">Filename</th>
-                <th className="py-2 pr-4 font-medium">Template</th>
-                <th className="py-2 pr-4 font-medium">Status</th>
-                <th className="py-2 pr-4 font-medium">Uploaded</th>
+                <th scope="col" className="py-2 pr-4 font-medium">
+                  Filename
+                </th>
+                <th scope="col" className="py-2 pr-4 font-medium">
+                  Template
+                </th>
+                <th scope="col" className="py-2 pr-4 font-medium">
+                  Status
+                </th>
+                <th scope="col" className="py-2 pr-4 font-medium">
+                  Uploaded
+                </th>
               </tr>
             </thead>
             <tbody>
