@@ -190,6 +190,10 @@ describe("processDocument", () => {
     expect(state.insertedRuns).toHaveLength(1);
     expect(state.insertedRuns[0]).toMatchObject({
       document_id: "doc-1",
+      // Denormalized for claim_next_document()'s indexed cost-cap lookup
+      // (supabase/migrations/20260806030000_index_cost_cap_lookup.sql) —
+      // must come from the claimed document's own org_id, not be omitted.
+      org_id: "org-1",
       attempt: 3,
       model: "claude-sonnet-5",
       input_tokens: 1000,

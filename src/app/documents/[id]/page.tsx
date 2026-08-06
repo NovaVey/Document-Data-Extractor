@@ -7,6 +7,7 @@ import { friendlyDbError } from "@/lib/errors/friendly";
 import type { TemplateField } from "@/lib/templates/types";
 import { ReviewPanel, type ExtractedFieldRow } from "./review-panel";
 import { DocumentStatusPoller } from "./status-poller";
+import { FailedDocumentActions } from "./failed-document-actions";
 
 const SIGNED_URL_TTL_SECONDS = 600;
 const UNPROCESSED_STATUSES = new Set(["uploaded", "queued", "processing"]);
@@ -111,9 +112,12 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
               off of. */}
           <div aria-live="polite">
             {document.status === "failed" && (
-              <p className="text-sm text-red-600 dark:text-red-400">
-                {document.error_message ?? "Processing failed."}
-              </p>
+              <>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {document.error_message ?? "Processing failed."}
+                </p>
+                <FailedDocumentActions documentId={document.id} />
+              </>
             )}
 
             {UNPROCESSED_STATUSES.has(document.status) && (

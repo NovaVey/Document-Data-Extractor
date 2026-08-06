@@ -146,12 +146,20 @@ export function ReviewPanel({
                         [field.key]: { value: e.target.value, wasCorrected: false },
                       }))
                     }
+                    // Every field's input is otherwise identical to a
+                    // screen reader (the visible label two lines up is a
+                    // plain <span>, not associated via htmlFor/aria-*) --
+                    // aria-label repeats the same text already shown
+                    // on-screen rather than introducing a second id/
+                    // htmlFor pair to keep in sync with field.key.
+                    aria-label={field.label}
                     className="flex-1 rounded border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/15"
                   />
                   <button
                     type="button"
                     onClick={() => handleSave(field.key)}
                     disabled={isPending}
+                    aria-label={`Save ${field.label}`}
                     className="rounded border border-black/10 px-3 py-1 text-xs disabled:opacity-50 dark:border-white/15"
                   >
                     Save

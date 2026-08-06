@@ -4,12 +4,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
 import { InviteForm } from "./invite-form";
+import { MemberRowActions } from "./member-row-actions";
 
 type MemberRow = {
   userId: string;
   email: string;
   role: "owner" | "member";
   pending: boolean;
+  lookupError: boolean;
 };
 
 export default async function MembersPage() {
@@ -59,15 +61,31 @@ export default async function MembersPage() {
     const admin = createAdminClient();
     members = await Promise.all(
       (memberships ?? []).map(async (m) => {
-        const { data } = await admin.auth.admin.getUserById(m.user_id);
+        const { data, error: lookupError } = await admin.auth.admin.getUserById(m.user_id);
+        // A failed lookup (transient Admin API error, or a user deleted
+        // out from under a stale membership row) must never be silently
+        // treated as "pending" — data.user would be undefined either way,
+        // and !undefined?.email_confirmed_at is true regardless of
+        // whether this member is actually active. Surfaced as its own
+        // distinct state instead.
+        if (lookupError || !data.user) {
+          return {
+            userId: m.user_id,
+            email: "(couldn't load)",
+            role: m.role as "owner" | "member",
+            pending: false,
+            lookupError: true,
+          };
+        }
         return {
           userId: m.user_id,
-          email: data.user?.email ?? "(unknown)",
+          email: data.user.email ?? "(unknown)",
           role: m.role as "owner" | "member",
           // Set once the invite link is clicked and verified, even before
           // a password is chosen — a reasonable, if imperfect, proxy for
           // "hasn't accepted their invite yet."
-          pending: !data.user?.email_confirmed_at,
+          pending: !data.user.email_confirmed_at,
+          lookupError: false,
         };
       }),
     );
@@ -116,8 +134,14 @@ export default async function MembersPage() {
                       Invited — hasn&apos;t accepted yet
                     </span>
                   )}
+                  {member.lookupError && (
+                    <span role="alert" className="ml-2 text-red-600 dark:text-red-400">
+                      Couldn&apos;t load this member&apos;s details — try refreshing
+                    </span>
+                  )}
                 </div>
               </div>
+              <MemberRowActions userId={member.userId} role={member.role} />
             </li>
           ))}
         </ul>

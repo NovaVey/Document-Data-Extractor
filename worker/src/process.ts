@@ -107,6 +107,14 @@ async function processDocumentInner(document: DocumentRow): Promise<void> {
 
   const { error: runError } = await supabase.from("extraction_runs").insert({
     document_id: document.id,
+    // Denormalized (supabase/migrations/20260806030000_index_cost_cap_lookup.sql)
+    // so claim_next_document()'s per-org daily cost-cap check can filter
+    // on an indexed column instead of joining through documents on every
+    // candidate row it examines. Safe to denormalize here specifically
+    // because extraction_runs rows are insert-only — nothing ever updates
+    // one after creation — so this can never drift out of sync the way a
+    // mutable denormalized column could.
+    org_id: document.org_id,
     attempt: (priorAttempts ?? 0) + 1,
     model: MODEL,
     input_tokens: inputTokens,
