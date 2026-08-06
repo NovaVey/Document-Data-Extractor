@@ -271,6 +271,56 @@ describe("buildExportTable", () => {
     const { rows } = buildExportTable([document({ template_id: null })], templatesById, []);
     expect(rows[0][1]).toBe(""); // Template column blank, not a crash
   });
+
+  // Medium-priority audit finding, the more dangerous silent sibling of
+  // approve_document() ignoring an orphaned field (HP2): a template field
+  // renamed/removed after a document was extracted and approved used to
+  // leave that document's real extracted_fields row with no column to
+  // land in at all, silently dropped from the export.
+  it("gives an orphaned field (its key no longer on the current template) its own fallback column instead of dropping it", () => {
+    const { headers, rows, fieldColumns } = buildExportTable(
+      [document({ id: "doc-1", template_id: templateA.id })],
+      templatesById,
+      [
+        field({ document_id: "doc-1", field_key: "vendor_name", normalized_value: "Acme" }),
+        field({ document_id: "doc-1", field_key: "total", normalized_value: "100.00" }),
+        // "old_po_number" isn't on templateA (or templateB) at all -- as if
+        // it existed on this template at extraction time and was later
+        // renamed/removed.
+        field({
+          document_id: "doc-1",
+          field_key: "old_po_number",
+          normalized_value: "PO-4471",
+        }),
+      ],
+    );
+
+    expect(headers).toContain("old_po_number");
+    expect(fieldColumns.at(-1)).toEqual({
+      key: "old_po_number",
+      label: "old_po_number",
+      type: "text",
+    });
+    expect(rows[0].at(-1)).toBe("PO-4471");
+  });
+
+  it("never adds a fallback column for a field row belonging to a document that isn't in this export", () => {
+    const { headers } = buildExportTable(
+      [document({ id: "doc-1", template_id: templateA.id })],
+      templatesById,
+      [
+        field({ document_id: "doc-1", field_key: "vendor_name" }),
+        field({ document_id: "doc-1", field_key: "total" }),
+        // Belongs to a document not passed to buildExportTable at all --
+        // must never leak in as a column just because it shares the
+        // `fields` array (defensive; the real caller already scopes its
+        // query with .in("document_id", documentIds) first).
+        field({ document_id: "doc-99-not-in-this-export", field_key: "unrelated_field" }),
+      ],
+    );
+
+    expect(headers).not.toContain("unrelated_field");
+  });
 });
 
 describe("toCsv", () => {

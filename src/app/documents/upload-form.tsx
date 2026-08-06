@@ -218,14 +218,18 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
           button below opens the file picker — clicking this description
           shouldn't. */}
       <p className="text-sm font-medium">Upload documents (PDF, PNG, or JPEG — up to 20MB each)</p>
-      <label
-        htmlFor="file-upload"
-        className={`w-fit rounded px-4 py-2 text-sm font-medium text-background ${
-          uploading ? "cursor-not-allowed bg-foreground/50" : "cursor-pointer bg-foreground"
-        }`}
-      >
-        Choose files
-      </label>
+      {/* The real, keyboard-focusable control is this sr-only <input> —
+          "Choose files" below is a <label>, not a <button>, purely for the
+          native file-picker-on-click behavior. The global :focus-visible
+          rule (globals.css) matches every real interactive element by tag,
+          so a Tab landing here put the outline on the invisible input with
+          nothing visible changing at all — the entry point to this app's
+          primary action had no visible keyboard focus indicator (medium-
+          priority audit finding). The input now comes first in the DOM
+          (still visually last, sr-only takes it out of flow either way)
+          with a `peer` class so peer-focus-visible: on the *visible* label
+          right after it can mirror that same outline — same 2px solid
+          blue-600 (#2563eb), same color the global rule already uses. */}
       <input
         id="file-upload"
         type="file"
@@ -238,8 +242,16 @@ export function UploadForm({ orgId, templates }: { orgId: string; templates: Tem
           }
           event.target.value = "";
         }}
-        className="sr-only"
+        className="peer sr-only"
       />
+      <label
+        htmlFor="file-upload"
+        className={`w-fit rounded px-4 py-2 text-sm font-medium text-background peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600 ${
+          uploading ? "cursor-not-allowed bg-foreground/50" : "cursor-pointer bg-foreground"
+        }`}
+      >
+        Choose files
+      </label>
       {results.some((result) => !result.dismissed) && (
         <ul aria-live="polite" aria-atomic="false" className="flex flex-col gap-1 text-sm">
           {results.map((result, idx) => {

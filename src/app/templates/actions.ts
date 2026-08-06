@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { validateFields, type TemplateField } from "@/lib/templates/types";
-import { getCurrentMembership } from "@/lib/org";
+import { requireOwnerMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
 import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit/check";
 
@@ -30,13 +30,13 @@ export async function createTemplate(
 
   const supabase = await createClient();
 
-  const membership = await getCurrentMembership();
-  if (!membership) return { error: "No organization membership found" };
   // Fast-fail ahead of the real enforcement (the INSERT policy in
   // supabase/migrations/20260805010000_role_enforcement.sql requires
   // is_writable_org_owner()) — a crafted request can't skip it, this just
   // turns that into a clear message instead of a raw RLS-violation error.
-  if (membership.role !== "owner") return { error: NOT_AN_OWNER_ERROR };
+  const ownerCheck = await requireOwnerMembership(NOT_AN_OWNER_ERROR);
+  if ("error" in ownerCheck) return { error: ownerCheck.error };
+  const { membership } = ownerCheck;
 
   const allowed = await checkRateLimit(
     supabase,
@@ -71,9 +71,8 @@ export async function updateTemplate(
 
   const supabase = await createClient();
 
-  const membership = await getCurrentMembership();
-  if (!membership) return { error: "No organization membership found" };
-  if (membership.role !== "owner") return { error: NOT_AN_OWNER_ERROR };
+  const ownerCheck = await requireOwnerMembership(NOT_AN_OWNER_ERROR);
+  if ("error" in ownerCheck) return { error: ownerCheck.error };
 
   const allowed = await checkRateLimit(
     supabase,
@@ -116,9 +115,8 @@ export async function updateTemplate(
 export async function deleteTemplate(id: string): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
-  const membership = await getCurrentMembership();
-  if (!membership) return { error: "No organization membership found" };
-  if (membership.role !== "owner") return { error: NOT_AN_OWNER_ERROR };
+  const ownerCheck = await requireOwnerMembership(NOT_AN_OWNER_ERROR);
+  if ("error" in ownerCheck) return { error: ownerCheck.error };
 
   const allowed = await checkRateLimit(
     supabase,

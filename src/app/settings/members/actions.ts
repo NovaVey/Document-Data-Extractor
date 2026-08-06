@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentMembership } from "@/lib/org";
+import { requireOwnerMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
 import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit/check";
 
@@ -29,14 +29,14 @@ export async function inviteMember(
   email: string,
   role: "owner" | "member",
 ): Promise<{ error: string } | undefined> {
-  const membership = await getCurrentMembership();
-  if (!membership) return { error: "No organization membership found" };
   // Fast-fail ahead of anything else below — this action is reachable
   // directly by a crafted request regardless of what the UI shows, and
   // it's the one action in this app that reaches for the service-role
   // client, so the owner check has to hold before that client is ever
   // constructed, not just before the invite email is sent.
-  if (membership.role !== "owner") return { error: NOT_AN_OWNER_ERROR };
+  const ownerCheck = await requireOwnerMembership(NOT_AN_OWNER_ERROR);
+  if ("error" in ownerCheck) return { error: ownerCheck.error };
+  const { membership } = ownerCheck;
 
   if (role !== "owner" && role !== "member") {
     return { error: "Invalid role." };
@@ -73,11 +73,26 @@ export async function inviteMember(
   });
 
   if (error) {
-    // Not routed through friendlyDbError: this is a Supabase Auth API
-    // error (e.g. "User already registered"), not a Postgres/PostgREST
-    // one — Auth error messages are already written to be user-facing,
-    // same reasoning as login-form.tsx's own signInError.message usage.
-    return { error: error.message };
+    // Low-priority audit finding: this used to forward error.message
+    // verbatim, the same reasoning login-form.tsx's signInError.message
+    // usage was written under (Auth API errors are already user-facing
+    // text) — but that reasoning doesn't hold here the way it does for a
+    // login form. A login form's own error only ever describes the
+    // caller's own account; this one describes an *arbitrary third
+    // party's* email. Supabase's real "User already registered" message
+    // let any org owner enumerate whether an arbitrary address has an
+    // account *anywhere in the whole Supabase project*, not just this
+    // org — a privacy leak with nothing to do with what this action is
+    // actually supposed to tell its caller (whether the org's own invite
+    // went out). The real message is still logged server-side for
+    // diagnosing a genuine Auth API outage; every caller-facing outcome
+    // collapses to the same generic text so no response variant reveals
+    // anything about whether the address exists elsewhere.
+    console.error(`[settings/members] inviteUserByEmail failed for an invite: ${error.message}`);
+    return {
+      error:
+        "Couldn't send this invite. Double-check the email address, or contact support if this keeps happening.",
+    };
   }
 
   revalidatePath("/settings/members");
@@ -91,9 +106,9 @@ export async function inviteMember(
 // chain (same reasoning as templates/actions.ts) turns an RLS-blocked
 // delete into a real error instead of a silent no-op.
 export async function removeMember(userId: string): Promise<{ error: string } | undefined> {
-  const membership = await getCurrentMembership();
-  if (!membership) return { error: "No organization membership found" };
-  if (membership.role !== "owner") return { error: NOT_AN_OWNER_ERROR };
+  const ownerCheck = await requireOwnerMembership(NOT_AN_OWNER_ERROR);
+  if ("error" in ownerCheck) return { error: ownerCheck.error };
+  const { membership } = ownerCheck;
 
   const supabase = await createClient();
   const allowed = await checkRateLimit(
@@ -153,9 +168,9 @@ export async function updateMemberRole(
   userId: string,
   role: "owner" | "member",
 ): Promise<{ error: string } | undefined> {
-  const membership = await getCurrentMembership();
-  if (!membership) return { error: "No organization membership found" };
-  if (membership.role !== "owner") return { error: NOT_AN_OWNER_ERROR };
+  const ownerCheck = await requireOwnerMembership(NOT_AN_OWNER_ERROR);
+  if ("error" in ownerCheck) return { error: ownerCheck.error };
+  const { membership } = ownerCheck;
 
   if (role !== "owner" && role !== "member") {
     return { error: "Invalid role." };

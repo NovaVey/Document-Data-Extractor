@@ -40,9 +40,10 @@ function startHeartbeat(documentId: string): ReturnType<typeof setInterval> {
 // Every processed document lands in 'needs_review', never an auto-approved
 // state — that's the actual point of this project, not a placeholder to
 // outgrow. The confidence threshold decides which *fields* get flagged for
-// a reviewer's attention (used below only for a summary count — there's no
-// review UI yet to route a per-field flag into, that's item 10), not
-// whether a document skips a human being involved at all.
+// a reviewer's attention (used below only for a summary count — the actual
+// per-field routing lives client-side in review-panel.tsx, which reads
+// final_confidence directly off each extracted_fields row), not whether a
+// document skips a human being involved at all.
 //
 // Never logs document contents or field values, only metadata and counts.
 export async function processDocument(document: DocumentRow): Promise<void> {

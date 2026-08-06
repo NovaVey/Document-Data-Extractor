@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
+import { OwnerOnlyPage } from "@/components/owner-only-page";
 import { InviteForm } from "./invite-form";
 import { MemberRowActions } from "./member-row-actions";
 
@@ -26,14 +27,7 @@ export default async function MembersPage() {
   // (bookmark, typed URL) sees a clear message instead of a page that
   // renders and then fails on submit.
   if (membership?.role !== "owner") {
-    return (
-      <main className="flex flex-1 flex-col gap-6 p-8">
-        <h1 className="text-xl font-semibold">Members</h1>
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Only an organization owner can manage members.
-        </p>
-      </main>
-    );
+    return <OwnerOnlyPage title="Members" action="manage members" />;
   }
 
   const {

@@ -1,4 +1,5 @@
 import { getCurrentMembership } from "@/lib/org";
+import { OwnerOnlyPage } from "@/components/owner-only-page";
 import { NewTemplateForm } from "./new-template-form";
 
 // Role enforcement (Medium PR F backlog item, supabase/migrations/
@@ -11,14 +12,7 @@ export default async function NewTemplatePage() {
   const membership = await getCurrentMembership();
 
   if (membership?.role !== "owner") {
-    return (
-      <main className="flex flex-1 flex-col gap-6 p-8">
-        <h1 className="text-xl font-semibold">New template</h1>
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Only an organization owner can create templates.
-        </p>
-      </main>
-    );
+    return <OwnerOnlyPage title="New template" action="create templates" />;
   }
 
   return (

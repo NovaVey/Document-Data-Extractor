@@ -96,6 +96,29 @@ export function buildExportTable(
     }
   }
 
+  // Medium-priority audit finding, the more dangerous silent sibling of
+  // the approve-gate one (approve_document() ignoring an orphaned field,
+  // supabase/migrations/20260806020000_approve_document_ignores_orphaned_fields.sql):
+  // a template field renamed or removed *after* a document was already
+  // extracted and approved leaves that document's real extracted_fields
+  // row sitting under its original field_key — historical data, this
+  // table is never mutated after the fact — with no column to land in at
+  // all, since the walk above only ever considers the CURRENT template's
+  // fields. Left alone, resolveFieldValue() below would silently return
+  // "" for it: real, already-approved data quietly missing from an
+  // export with nothing telling the person who ran it anything was
+  // dropped. Any field_key actually present on a document being exported
+  // that isn't already covered gets its own fallback column instead —
+  // labeled with the raw key itself (there's no surviving template field
+  // definition to source a nicer label or type from) — so the data always
+  // reaches the export rather than vanishing.
+  const exportedDocumentIds = new Set(documents.map((d) => d.id));
+  for (const field of fields) {
+    if (seenKeys.has(field.field_key) || !exportedDocumentIds.has(field.document_id)) continue;
+    seenKeys.add(field.field_key);
+    fieldColumns.push({ key: field.field_key, label: field.field_key, type: "text" });
+  }
+
   const headers = [...METADATA_HEADERS, ...fieldColumns.map((c) => c.label)];
 
   const rows = documents.map((document) => {

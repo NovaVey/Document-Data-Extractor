@@ -1,0 +1,20 @@
+-- Low-priority audit finding: log_field_correction() (supabase/migrations/
+-- 20260727020000_document_audit_log.sql) only ever got `revoke all on
+-- function ... from public` — missing the explicit `revoke ... from anon,
+-- authenticated` this project has already had to add twice for other
+-- functions (claim_next_document: 20260725040100_fix_claim_function_grants.sql;
+-- check_rate_limit: 20260805000001_fix_rate_limit_anon_grant.sql), both
+-- times because Supabase's own default privileges grant EXECUTE on a new
+-- public-schema function directly to anon/authenticated at CREATE FUNCTION
+-- time — a grant `revoke ... from public` alone never touches.
+--
+-- Low risk in practice, unlike the previous two: log_field_correction()
+-- returns `trigger`, a pseudo-type Postgres only allows inside a trigger's
+-- own calling convention — `select public.log_field_correction()` is
+-- rejected outright regardless of any grant ("trigger functions can only
+-- be called as triggers"), so this was never actually callable by a
+-- signed-in user even before this migration. Added anyway for the same
+-- "verify the grant, don't assume it" hygiene the other two fixes
+-- established, and so a future function that copies this one's structure
+-- doesn't copy the gap along with it.
+revoke execute on function public.log_field_correction() from anon, authenticated;

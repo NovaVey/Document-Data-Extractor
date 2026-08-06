@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // asserts the real lane count it drives tick() with, closing that gap.
 const state = vi.hoisted(() => ({
   tickMock: vi.fn(async () => {}),
+  heartbeatEqMock: vi.fn(async () => ({ error: null })),
 }));
 
 vi.mock("../src/tick.js", () => ({
@@ -21,10 +22,27 @@ vi.mock("../src/sentry.js", () => ({
   },
 }));
 
+// index.ts imports supabase.js at module load time now (recordHeartbeat()),
+// which throws immediately without real SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
+// — this test only cares about lane wiring, not the real client, so it's
+// mocked the same way process.test.ts/tick.test.ts already mock this
+// module. Chained deep enough to match recordHeartbeat()'s actual call
+// shape (.from(...).update(...).eq(...)).
+vi.mock("../src/supabase.js", () => ({
+  supabase: {
+    from: () => ({
+      update: () => ({
+        eq: (...args: unknown[]) => state.heartbeatEqMock(...args),
+      }),
+    }),
+  },
+}));
+
 const ORIGINAL_ENV = process.env.WORKER_CONCURRENCY;
 
 beforeEach(() => {
   state.tickMock.mockClear();
+  state.heartbeatEqMock.mockClear();
   vi.useFakeTimers();
   // index.ts keeps its own shuttingDown flag as module-level state, set
   // permanently true by the previous test's requestShutdown() call — a
@@ -65,6 +83,11 @@ describe("main() — actual WORKER_CONCURRENCY wiring", () => {
     // sleep() — this is exactly what the earlier hardcoded-to-1 mutation
     // would fail: only 1 call would be observed here instead of 4.
     expect(state.tickMock).toHaveBeenCalledTimes(4);
+
+    // Only lane 0 writes the heartbeat, deliberately — 4 lanes ticking
+    // doesn't mean 4 redundant writes to the same single-row table every
+    // interval (see recordHeartbeat()'s call site comment in index.ts).
+    expect(state.heartbeatEqMock).toHaveBeenCalledTimes(1);
 
     // Every lane is now parked in sleep(POLL_INTERVAL_MS) (a real
     // setTimeout, faked). Request shutdown, then advance fake time past

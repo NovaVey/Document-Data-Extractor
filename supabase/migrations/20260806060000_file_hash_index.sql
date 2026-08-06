@@ -1,0 +1,21 @@
+-- Medium-priority audit finding: findDuplicateDocument() (src/app/documents/
+-- actions.ts) queries `.eq("file_hash", fileHash)` with no org_id filter of
+-- its own — RLS is what scopes it to the caller's org, same pattern as
+-- every other unfiltered query in this app. The existing unique index,
+-- documents_org_id_file_hash_key (org_id, file_hash), has org_id as its
+-- leading column, so it can't help a query that only filters on file_hash.
+-- Worse, RLS's own predicate here is a function call
+-- (is_org_member(documents.org_id)), not a direct comparison against a
+-- session-derived value — Postgres's planner generally can't push a
+-- function-wrapped predicate down into an index condition, so it can't use
+-- even the leading org_id column to prune rows. Net effect: this lookup —
+-- which runs once per uploaded file, including every file in a batch
+-- upload — has no supporting index at all today and degrades as
+-- `documents` grows.
+--
+-- A plain index on file_hash alone (not composite) fixes this: Postgres
+-- can narrow to the (normally tiny, ideally zero or one) set of rows
+-- sharing this exact hash first, cheaply, then apply the RLS function
+-- filter to that already-small result set — instead of the RLS predicate
+-- being the only thing standing between this query and a sequential scan.
+create index documents_file_hash_idx on documents (file_hash);

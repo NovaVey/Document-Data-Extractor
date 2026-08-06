@@ -1,6 +1,7 @@
 import { tick } from "./tick.js";
 import { Sentry } from "./sentry.js";
 import { resolveWorkerConcurrency } from "./concurrency.js";
+import { supabase } from "./supabase.js";
 
 export const POLL_INTERVAL_MS = 5_000;
 const STALE_AFTER_MINUTES = 10;
@@ -45,7 +46,34 @@ async function lane(id: number): Promise<void> {
       console.error(`[worker] lane ${id} tick error:`, err instanceof Error ? err.message : err);
       Sentry.captureException(err);
     }
+    // Only lane 0 — every lane ticking at the same POLL_INTERVAL_MS would
+    // otherwise mean WORKER_CONCURRENCY separate writes to the same
+    // single-row table every interval, for no benefit (one lane being
+    // alive is exactly as good a liveness signal as all of them being
+    // alive; a heartbeat says "the process is running," not "every lane
+    // is healthy"). Written whether the tick above found work, errored, or
+    // was simply a no-op poll — a heartbeat that only recorded successful
+    // ticks would go stale during a legitimate empty-queue lull, exactly
+    // the false positive this exists to avoid.
+    if (id === 0) await recordHeartbeat();
     await sleep(POLL_INTERVAL_MS);
+  }
+}
+
+// Medium-priority audit finding: nothing distinguished "no uploads today"
+// from "the worker has been silently down for six hours" — Sentry only
+// ever fires on an actual thrown error, not on the process simply not
+// running at all. Best-effort: a failed heartbeat write is logged and
+// reported to Sentry but never thrown, since a heartbeat outage
+// shouldn't itself take down the actual processing loop it's reporting on.
+async function recordHeartbeat(): Promise<void> {
+  const { error } = await supabase
+    .from("worker_heartbeat")
+    .update({ last_tick_at: new Date().toISOString() })
+    .eq("id", true);
+  if (error) {
+    console.error(`[worker] heartbeat write failed: ${error.message}`);
+    Sentry.captureException(error);
   }
 }
 

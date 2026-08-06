@@ -115,6 +115,20 @@ flagged in `needs_review` — but Save/Approve/Upload/Delete won't take effect.
   service-role key that bypasses RLS entirely (it has to see every org's
   queue) and is never exposed to the browser.
 
+### Backups
+
+The live demo project has **no Point-in-Time Recovery or scheduled backup
+enabled** — a deliberate choice for a portfolio/demo instance (Supabase's
+free tier has no PITR at all; a daily-backup-capable plan is a real
+recurring cost that isn't justified for demo traffic), not an oversight.
+Concretely, that means a bad migration or an accidental `delete` run
+directly against the database has no automatic undo — the working log
+(`WORKFLOW.md`) already has one real incident of exactly that, recovered by
+hand via direct SQL rather than a restore. A real production deployment of
+this app should turn on PITR (or at minimum daily backups) in the Supabase
+project's Database settings before it holds anyone's real data — this
+isn't something the app or its migrations can enable on their own.
+
 ## Local setup
 
 ```bash
