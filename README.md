@@ -175,13 +175,18 @@ Built on Supabase's own `admin.inviteUserByEmail()`; the invited user's
 `auth.users` row is created immediately (visible in the members list as
 "Invited — hasn't accepted yet" until they click the link).
 
-This needs two things configured on the Supabase project, done once per
-deployment (see `WORKFLOW.md`'s decisions log for the full reasoning):
-- **Custom SMTP** — the project's built-in mailer is capped at ~2
-  emails/hour and isn't meant for real use; Authentication → Settings →
-  SMTP Settings, any provider (Resend, Postmark, SES, ...).
-- **Site URL** set to the real deployed app's URL (Authentication →
-  URL Configuration) — used to build the link in the invite email.
+This needs one thing configured on the Supabase project, done once per
+deployment: **Site URL** set to the real deployed app's URL (Authentication →
+URL Configuration) — used to build the link in the invite email. Without it,
+invite links point at `localhost` and don't work.
+
+**Custom SMTP** (Authentication → Settings → SMTP Settings, any provider —
+Resend, Postmark, SES, ...) is optional but recommended for real use: the
+project's built-in mailer works out of the box with no setup, but is capped
+at ~2 emails/hour and sends from a generic address rather than your own
+domain — fine for occasional/portfolio use, not for a team actually
+inviting people regularly (see `WORKFLOW.md`'s decisions log for the full
+reasoning, including why this project itself runs on the default mailer).
 
 `SUPABASE_SERVICE_ROLE_KEY` must also be set in the web app's own server
 environment (see `.env.example`) — this is the one feature in the app
