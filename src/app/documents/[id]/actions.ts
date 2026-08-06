@@ -3,6 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolveReviewConfidenceThreshold } from "@/lib/review/threshold";
+import { friendlyDbError } from "@/lib/errors/friendly";
+import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit/check";
+
+// Generous relative to real review sessions: a reviewer correcting many
+// fields across many documents back to back is the expected common case
+// here, not the abuse case this is meant to catch — sized well above
+// anything a person clicking through a review queue would ever hit.
+const CORRECTION_MAX_HITS = 500;
+const CORRECTION_WINDOW = "5 minutes";
+const APPROVAL_MAX_HITS = 200;
+const APPROVAL_WINDOW = "5 minutes";
 
 // corrected_by is never taken from the caller — derived from the
 // authenticated session and enforced again by the RLS with-check clause
@@ -29,6 +40,14 @@ export async function saveCorrection(
     return { error: "Not signed in" };
   }
 
+  const allowed = await checkRateLimit(
+    supabase,
+    "field_correction",
+    CORRECTION_MAX_HITS,
+    CORRECTION_WINDOW,
+  );
+  if (!allowed) return { error: RATE_LIMIT_MESSAGE };
+
   const { error } = await supabase
     .from("extracted_fields")
     .update({
@@ -41,7 +60,7 @@ export async function saveCorrection(
     .eq("field_key", fieldKey);
 
   if (error) {
-    return { error: error.message };
+    return { error: friendlyDbError(error, "Couldn't save your correction. Please try again.") };
   }
 
   revalidatePath(`/documents/${documentId}`);
@@ -55,11 +74,23 @@ export async function saveCorrection(
 export async function approveDocument(documentId: string): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
+  const allowed = await checkRateLimit(
+    supabase,
+    "document_approval",
+    APPROVAL_MAX_HITS,
+    APPROVAL_WINDOW,
+  );
+  if (!allowed) return { error: RATE_LIMIT_MESSAGE };
+
   const { error } = await supabase.rpc("approve_document", {
     p_document_id: documentId,
     p_confidence_threshold: resolveReviewConfidenceThreshold(),
   });
 
+  // Not routed through friendlyDbError: approve_document()'s own
+  // exceptions (the review-gate messages) are already hand-authored,
+  // user-facing text, not a raw constraint error — passing them through
+  // as-is is the intended behavior, same as before this change.
   if (error) {
     return { error: error.message };
   }
