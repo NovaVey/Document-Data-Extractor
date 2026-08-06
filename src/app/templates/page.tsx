@@ -31,6 +31,11 @@ export default async function TemplatesPage() {
             Documents
           </Link>
           {isOwner && (
+            <Link href="/settings/members" className="text-sm underline underline-offset-2">
+              Members
+            </Link>
+          )}
+          {isOwner && (
             <Link
               href="/templates/new"
               className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background"

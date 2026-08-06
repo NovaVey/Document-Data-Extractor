@@ -1,7 +1,13 @@
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+// /invite/accept has to be public even though it's not a "log in" page:
+// it's reached with no session cookie at all (the invite link's session
+// tokens arrive as a URL hash fragment or code param, established
+// entirely client-side — see that page's own comment for why), so
+// requiring an existing session to reach it would redirect every real
+// invite link straight to /login before the page can even run.
+const PUBLIC_PATHS = ["/login", "/invite/accept"];
 
 // Refreshes the session on every request. Server Components can't write
 // cookies, so an expiring auth token would otherwise never get renewed —

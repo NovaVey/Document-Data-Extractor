@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentOrgId } from "@/lib/org";
+import { getCurrentMembership } from "@/lib/org";
 import { statusLabel } from "@/lib/documents/status";
 import { DAILY_COST_CAP_CENTS } from "@/lib/documents/cost-cap";
 import { friendlyDbError } from "@/lib/errors/friendly";
@@ -26,7 +26,8 @@ export default async function DocumentsPage({
 }) {
   const { status, template, q, page: pageParam } = await searchParams;
   const supabase = await createClient();
-  const orgId = await getCurrentOrgId();
+  const membership = await getCurrentMembership();
+  const orgId = membership?.orgId ?? null;
 
   // Guards against a non-numeric, negative, or zero page param (typed by
   // hand or a stale bookmark from before the page count shrank) rather
@@ -120,6 +121,11 @@ export default async function DocumentsPage({
           <Link href="/templates" className="text-sm underline underline-offset-2">
             Templates
           </Link>
+          {membership?.role === "owner" && (
+            <Link href="/settings/members" className="text-sm underline underline-offset-2">
+              Members
+            </Link>
+          )}
           <form action={signOut}>
             <button type="submit" className="text-sm underline underline-offset-2">
               Sign out
