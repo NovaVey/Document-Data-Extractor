@@ -140,8 +140,6 @@ running either the app or the worker.
 There is currently no self-service sign-up flow — creating the first
 user/organization for a deployment of this template is a one-time, manual
 step done with your Supabase project's own tools, not through the app's UI.
-(A self-service invite flow is a known, deliberately deferred backlog item —
-see `WORKFLOW.md`'s decisions log.)
 
 1. **Create the user** — Supabase Dashboard → Authentication → Users → Add
    user (or the [Admin API](https://supabase.com/docs/reference/javascript/auth-admin-createuser),
@@ -158,14 +156,41 @@ see `WORKFLOW.md`'s decisions log.)
    insert into memberships (org_id, user_id, role)
    values ('<org id from above>', '<user id from step 1>', 'owner');
    ```
-   `role` is `'owner'` or `'member'` (`memberships.role`) — this column
-   exists in the schema, but the app does not yet differentiate behavior
-   by role (also a deferred item, see `WORKFLOW.md`). Either value works
-   identically today.
+   `role` is `'owner'` or `'member'` (`memberships.role`) — owners can
+   manage templates and invite/see members; members can do everything
+   else (upload, review, approve, export). See "Adding more users" below
+   for every user after this first one.
 3. **Create a template and sign in** — sign in at `/login` with the
    credentials from step 1; the first thing to do from there is
    `/templates/new` to define what fields to extract, since uploading
    requires picking an existing template.
+
+### Adding more users
+
+Once an organization has its first owner, every subsequent user is
+self-service via `/settings/members`: sign in as an owner, enter an email
+and a role (owner or member), and the invited person gets an email with a
+link to set their password and join — no Supabase Dashboard/SQL needed.
+Built on Supabase's own `admin.inviteUserByEmail()`; the invited user's
+`auth.users` row is created immediately (visible in the members list as
+"Invited — hasn't accepted yet" until they click the link).
+
+This needs one thing configured on the Supabase project, done once per
+deployment: **Site URL** set to the real deployed app's URL (Authentication →
+URL Configuration) — used to build the link in the invite email. Without it,
+invite links point at `localhost` and don't work.
+
+**Custom SMTP** (Authentication → Settings → SMTP Settings, any provider —
+Resend, Postmark, SES, ...) is optional but recommended for real use: the
+project's built-in mailer works out of the box with no setup, but is capped
+at ~2 emails/hour and sends from a generic address rather than your own
+domain — fine for occasional/portfolio use, not for a team actually
+inviting people regularly (see `WORKFLOW.md`'s decisions log for the full
+reasoning, including why this project itself runs on the default mailer).
+
+`SUPABASE_SERVICE_ROLE_KEY` must also be set in the web app's own server
+environment (see `.env.example`) — this is the one feature in the app
+that uses it; every other request stays anon-key + RLS-scoped.
 
 ## Testing
 

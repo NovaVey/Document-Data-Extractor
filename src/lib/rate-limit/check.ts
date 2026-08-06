@@ -19,6 +19,7 @@ export const RATE_LIMIT_ACTIONS = [
   "field_correction",
   "document_approval",
   "document_export",
+  "member_invite",
 ] as const;
 
 export type RateLimitAction = (typeof RATE_LIMIT_ACTIONS)[number];
