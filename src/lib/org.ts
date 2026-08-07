@@ -2,14 +2,25 @@ import { createClient } from "@/lib/supabase/server";
 
 export type Membership = { orgId: string; role: "owner" | "member" };
 
-// v1 has no invite flow, so every user has exactly one membership (the
-// org their signup trigger created for them) — first row is the only row
-// today. .order() is added anyway (rather than relying on an implicit
-// "only row" guarantee): Postgres makes no ordering promise for a query
-// without one, and once a second membership can exist (the invite flow),
-// nothing else guarantees which row comes back "first" — ordering now
-// costs nothing (there's only one row to order) and removes that as a
-// future divergence risk entirely.
+// This query has no explicit user_id filter of its own — it relies
+// entirely on RLS to scope the result set. That was safe when "org
+// members can view memberships in their org" was written: at the time
+// every org had exactly one member (its owner), so "the org's only
+// membership row" and "my membership row" were the same thing. The
+// invite flow broke that assumption without anyone touching this
+// function: that same RLS policy is deliberately org-wide (any member
+// can see every membership in their org, not just their own — the
+// Members page needs that), so once an org has 2+ members, an unfiltered
+// `.order(created_at).limit(1)` returns whichever row was created first
+// for the ORG, not the caller's own row. Since the owner's row is always
+// created first (the signup trigger creates it), every non-owner member
+// of a multi-person org was silently treated as an owner here — wrongly
+// granted owner-only UI (Members link, template New/Edit/Delete) and
+// passing requireOwnerMembership()'s pre-check, only to have the actual
+// write rejected by is_writable_org_owner()'s RLS (which does check
+// auth.uid() correctly) with a confusing raw DB error instead of the
+// friendly "only an owner can..." message. Caught live: a seeded
+// "member"-role demo user saw the owner's Members link.
 //
 // This used to have a getCurrentOrgId() sibling (org_id only, no role) —
 // dropped once role enforcement shipped and the last caller migrated to
@@ -17,9 +28,14 @@ export type Membership = { orgId: string; role: "owner" | "member" };
 // before removing it (low-priority audit finding, dead code).
 export async function getCurrentMembership(): Promise<Membership | null> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
   const { data } = await supabase
     .from("memberships")
     .select("org_id, role")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
