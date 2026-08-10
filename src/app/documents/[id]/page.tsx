@@ -12,7 +12,14 @@ import { FailedDocumentActions } from "./failed-document-actions";
 import { ActivityLog } from "./activity-log";
 
 const SIGNED_URL_TTL_SECONDS = 600;
-const UNPROCESSED_STATUSES = new Set(["uploaded", "queued", "processing"]);
+// "processing" is deliberately its own branch below, not folded into this
+// set — a processing document has already left the queue (queued ->
+// processing -> needs_review/failed, see status.ts / status-poller.tsx's
+// own IN_FLIGHT_STATUSES), so telling a viewer to wait for it to "leave
+// the queue" is stale for that specific status. Caught live reviewing
+// demo screenshots: the copy visibly contradicted the "(processing)"
+// label shown right above it.
+const QUEUE_STATUSES = new Set(["uploaded", "queued"]);
 
 export default async function DocumentReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -117,9 +124,15 @@ export default async function DocumentReviewPage({ params }: { params: Promise<{
               </>
             )}
 
-            {UNPROCESSED_STATUSES.has(document.status) && (
+            {QUEUE_STATUSES.has(document.status) && (
               <p className="text-sm text-black/60 dark:text-white/60">
                 Not processed yet — this updates automatically once it leaves the queue.
+              </p>
+            )}
+
+            {document.status === "processing" && (
+              <p className="text-sm text-black/60 dark:text-white/60">
+                Extraction in progress — this updates automatically once it finishes.
               </p>
             )}
 
