@@ -38,3 +38,28 @@ export function friendlyDbError(error: DbErrorLike, fallback: string): string {
       return fallback;
   }
 }
+
+// Supabase Storage errors never carry a `.code` the way Postgres/PostgREST
+// errors do (see friendlyDbError above), so upload-form.tsx's uploadEntry()
+// and documents/actions.ts's deleteDocumentForReplace() deliberately show a
+// Storage error's raw `.message` rather than routing it through
+// friendlyDbError — a genuinely diagnosable failure (session expired,
+// quota hit, file too large) shouldn't collapse into one generic fallback.
+// One message is still worth intercepting, though: storage.objects is
+// RLS-protected by the same is_writable_org_member() predicate as every
+// other write path in this app (blocks both a genuine non-member and the
+// read-only demo account alike), and a write it rejects surfaces literal
+// Postgres wording ("new row violates row-level security policy for
+// table \"objects\"") — accurate, but meaningless jargon to whoever's
+// looking at it, unlike the friendly text friendlyDbError already gives
+// the identical underlying failure (42501/PGRST301) everywhere else in
+// this app. Caught live: a real upload attempt against the read-only demo
+// account surfaced this raw string with nothing else explaining it.
+// Substring match, not an exact-message match — Postgres appends a
+// table/policy-name suffix that can vary and isn't worth matching exactly.
+export function friendlyStorageError(message: string): string {
+  if (/row-level security policy/i.test(message)) {
+    return "You don't have permission to do that.";
+  }
+  return message;
+}

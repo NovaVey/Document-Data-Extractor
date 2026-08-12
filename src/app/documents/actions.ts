@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
-import { friendlyDbError } from "@/lib/errors/friendly";
+import { friendlyDbError, friendlyStorageError } from "@/lib/errors/friendly";
 import { checkRateLimit, RATE_LIMIT_MESSAGE } from "@/lib/rate-limit/check";
 
 export async function signOut() {
@@ -97,8 +97,10 @@ export async function deleteDocumentForReplace(
     // Not routed through friendlyDbError: that helper maps Postgres/
     // PostgREST error codes, which a Supabase Storage error never
     // carries — see upload-form.tsx's uploadEntry() for the same
-    // reasoning (this call site was flagged as the same issue).
-    return { error: storageError.message };
+    // reasoning (this call site was flagged as the same issue), and for
+    // why friendlyStorageError() still intercepts an RLS-blocked write
+    // specifically rather than passing every Storage message through raw.
+    return { error: friendlyStorageError(storageError.message) };
   }
 
   const { error: deleteError } = await supabase.from("documents").delete().eq("id", documentId);
