@@ -16,7 +16,10 @@ describe("friendlyDbError", () => {
 
   it("maps insufficient_privilege (42501) to a friendly permission message", () => {
     expect(
-      friendlyDbError({ code: "42501", message: "permission denied for table documents" }, "fallback"),
+      friendlyDbError(
+        { code: "42501", message: "permission denied for table documents" },
+        "fallback",
+      ),
     ).toBe("You don't have permission to do that.");
   });
 
