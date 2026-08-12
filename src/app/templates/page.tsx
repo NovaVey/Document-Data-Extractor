@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
+import { signOut } from "@/app/documents/actions";
 import { DeleteTemplateButton } from "./delete-template-button";
 import type { TemplateField } from "@/lib/templates/types";
 
@@ -43,6 +44,16 @@ export default async function TemplatesPage() {
               New template
             </Link>
           )}
+          {/* Each page hand-rolls its own header rather than sharing one
+              component, and this link only ever got added to /documents'
+              — a member landing on /templates or /settings/members
+              directly had no way to sign out short of navigating back to
+              Documents first. Caught live reviewing demo screenshots. */}
+          <form action={signOut}>
+            <button type="submit" className="text-sm underline underline-offset-2">
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
 

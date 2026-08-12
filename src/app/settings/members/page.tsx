@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentMembership } from "@/lib/org";
 import { friendlyDbError } from "@/lib/errors/friendly";
 import { OwnerOnlyPage } from "@/components/owner-only-page";
+import { signOut } from "@/app/documents/actions";
 import { InviteForm } from "./invite-form";
 import { MemberRowActions } from "./member-row-actions";
 
@@ -96,6 +97,16 @@ export default async function MembersPage() {
           <Link href="/templates" className="text-sm underline underline-offset-2">
             Templates
           </Link>
+          {/* Each page hand-rolls its own header rather than sharing one
+              component, and this link only ever got added to /documents'
+              — a member landing on /settings/members or /templates
+              directly had no way to sign out short of navigating back to
+              Documents first. Caught live reviewing demo screenshots. */}
+          <form action={signOut}>
+            <button type="submit" className="text-sm underline underline-offset-2">
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
 
